@@ -7,11 +7,17 @@ echo "Creating Python virtual environment..."
 python -m venv .venv
 
 echo "Activating virtual environment..."
-source .venv/bin/activate
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+elif [ -f ".venv/Scripts/activate" ]; then
+    source .venv/Scripts/activate
+fi
 
 echo "Installing dependencies..."
 pip install deepagents aegra-api
-pip install -e ./deepagents 2>/dev/null || true
+if [ -d "./deepagents" ]; then
+    pip install -e ./deepagents
+fi
 
 echo "Installing additional dependencies..."
 pip install langgraph langchain-openai python-dotenv asyncpg

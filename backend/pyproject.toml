@@ -3,12 +3,12 @@ name = "agent-chat-backend"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "deepagents",
-    "aegra-api",
-    "langgraph",
-    "langchain-openai",
-    "langchain-anthropic",
-    "python-dotenv",
-    "psycopg2-binary",
-    "asyncpg",
+    "deepagents>=0.1.0",
+    "aegra-api>=0.1.0",
+    "langgraph>=0.2.0",
+    "langchain-openai>=0.1.0",
+    "langchain-anthropic>=0.1.0",
+    "python-dotenv>=1.0.0",
+    "psycopg2-binary>=2.9.0",
+    "asyncpg>=0.29.0",
 ]
