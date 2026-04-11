@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.aegra.dev/schema.json",
+  "graphs": {
+    "basic-agent": {
+      "path": "agents.basic_agent",
+      "name": "basic-agent",
+      "description": "A basic conversational agent"
+    }
+  },
+  "auth": {
+    "enabled": false
+  },
+  "http": {
+    "port": 2026,
+    "cors": {
+      "allow_origins": ["http://localhost:3000"],
+      "allow_credentials": true
+    }
+  },
+  "store": {
+    "enabled": false
+  },
+  "observability": {
+    "enabled": false
+  }
+}
