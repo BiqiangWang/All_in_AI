@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api:*)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(pip index:*)",
+      "Bash(pip search:*)"
+    ]
+  }
+}
