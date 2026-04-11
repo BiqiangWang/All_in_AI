@@ -5,7 +5,13 @@
       "WebFetch(domain:github.com)",
       "WebSearch",
       "Bash(pip index:*)",
-      "Bash(pip search:*)"
+      "Bash(pip search:*)",
+      "Bash(python3 -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(conda run:*)",
+      "Bash(rm -rf D:/Dev/All_in_AI/frontend/.git)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
