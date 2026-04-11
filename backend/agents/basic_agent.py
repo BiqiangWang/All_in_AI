@@ -1,15 +1,16 @@
 """Basic conversational agent using deepagents."""
 
+from typing import Any
 from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
 
-def create_basic_agent(model_name: str = "gpt-4o") -> dict:
+def create_basic_agent(model_name: str = "gpt-4o") -> dict[str, Any]:
     """Create a basic ReAct agent.
 
     Args:
-        model_name: The model to use for the agent.
+        model_name: The model to use for the agent. Use "claude-*" for Anthropic models.
 
     Returns:
         A dict containing the graph and metadata.
@@ -31,7 +32,7 @@ def create_basic_agent(model_name: str = "gpt-4o") -> dict:
 
 
 # For Aegra loading, export graph
-def get_graph():
+def get_graph() -> Any:
     """Factory function for Aegra to load the graph."""
     agent = create_basic_agent()
     return agent["graph"]

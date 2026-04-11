@@ -2,7 +2,7 @@
   "$schema": "https://docs.aegra.dev/schema.json",
   "graphs": {
     "basic-agent": {
-      "path": "agents.basic_agent",
+      "path": "backend.agents.basic_agent",
       "name": "basic-agent",
       "description": "A basic conversational agent"
     }
