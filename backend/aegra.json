@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.aegra.dev/schema.json",
   "graphs": {
-    "basic-agent": "./agents/basic_agent.py:graph"
+    "all-in-ai": "./agents/basic_agent.py:graph"
   },
   "auth": {
     "enabled": false
