@@ -100,7 +100,7 @@ Current date: {date.today().isoformat()}
         tools=[search_web],
         system_prompt=system_prompt,
         backend=backend,
-        skills=["/nuwa/"],
+        skills=["/nuwa/", "/elon-musk/", "/trump/", "/zhangxuefeng/"],
     )
 
     return {
@@ -119,3 +119,46 @@ def get_graph() -> Any:
 
 # Export graph (for static loading)
 graph = get_graph()
+
+
+def get_skills_metadata() -> list[dict]:
+    """扫描 skills 目录，返回 skill 元数据列表"""
+    import re
+
+    skills_root = Path(__file__).parent.parent / "skills"
+    if not skills_root.exists():
+        return []
+
+    skills = []
+    for skill_dir in skills_root.iterdir():
+        if not skill_dir.is_dir():
+            continue
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            continue
+
+        content = skill_md.read_text(encoding='utf-8')
+
+        # Parse frontmatter
+        name = skill_dir.name
+        description = ""
+        triggers = []
+
+        # Extract from first markdown heading as fallback
+        heading_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+        if heading_match:
+            description = heading_match.group(1).strip()
+
+        # Extract name from frontmatter if present
+        fm_name_match = re.search(r'^name:\s*(.+)$', content, re.MULTILINE)
+        if fm_name_match:
+            name = fm_name_match.group(1).strip()
+
+        skills.append({
+            "name": name,
+            "description": description,
+            "triggers": triggers,
+            "path": f"/{skill_dir.name}/"
+        })
+
+    return skills
