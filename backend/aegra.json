@@ -1,11 +1,7 @@
 {
   "$schema": "https://docs.aegra.dev/schema.json",
   "graphs": {
-    "basic-agent": {
-      "path": "backend.agents.basic_agent",
-      "name": "basic-agent",
-      "description": "A basic conversational agent"
-    }
+    "basic-agent": "./agents/basic_agent.py:graph"
   },
   "auth": {
     "enabled": false
