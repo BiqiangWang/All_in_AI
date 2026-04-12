@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from deepagents import create_deep_agent
-from deepagents.backends.state import StateBackend
+from deepagents.backends.filesystem import FilesystemBackend
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 from pydantic import Field
@@ -91,11 +91,16 @@ Current date: {date.today().isoformat()}
 - 搜索只用一次，不要重复搜索同一问题
 """
 
+    # Use FilesystemBackend for skill loading
+    skills_root = Path(__file__).parent.parent / "skills"
+    backend = FilesystemBackend(root_dir=str(skills_root), virtual_mode=True)
+
     graph = create_deep_agent(
         model=model,
         tools=[search_web],
         system_prompt=system_prompt,
-        backend=StateBackend,
+        backend=backend,
+        skills=["/nuwa/"],
     )
 
     return {
