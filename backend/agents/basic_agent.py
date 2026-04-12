@@ -17,6 +17,9 @@ if _env_path.exists():
     from dotenv import load_dotenv
     load_dotenv(_env_path)
 
+# Skills root directory
+skills_root = Path(__file__).parent.parent / "skills"
+
 
 @tool
 def search_web(query: str = Field(description="The search query to look up on the web")) -> str:
@@ -162,3 +165,35 @@ def get_skills_metadata() -> list[dict]:
         })
 
     return skills
+
+
+def extract_skill_names(text: str) -> list[str]:
+    """从文本中提取 /skillname 格式的命令"""
+    import re
+    matches = re.findall(r'/([a-zA-Z0-9_-]+)', text)
+    return matches
+
+
+def load_skill_content(skill_name: str) -> str:
+    """加载指定 skill 的 SKILL.md 内容"""
+    skill_path = skills_root / skill_name / "SKILL.md"
+    if skill_path.exists():
+        return skill_path.read_text(encoding='utf-8')
+    return ""
+
+
+def activate_skills_in_message(message: str, system_prompt: str) -> str:
+    """检测消息中的 skill 命令并激活对应的 skill 内容"""
+    skill_names = extract_skill_names(message)
+    if not skill_names:
+        return system_prompt
+
+    activated_content = []
+    for skill_name in skill_names:
+        content = load_skill_content(skill_name)
+        if content:
+            activated_content.append(content)
+
+    if activated_content:
+        return "\n\n".join(activated_content) + "\n\n" + system_prompt
+    return system_prompt
