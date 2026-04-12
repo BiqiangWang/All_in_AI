@@ -1,6 +1,7 @@
 """Interactive conversational agent for All_in_AI."""
 
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +31,21 @@ def search_web(query: str = Field(description="The search query to look up on th
     Returns:
         Search results with titles and snippets
     """
-    from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+    from ddgs import DDGS
 
-    search = DuckDuckGoSearchAPIWrapper()
     try:
-        results = search.run(query)
-        return results if results else "No results found."
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=5))
+            if not results:
+                return "No results found."
+            # Format results cleanly
+            formatted = []
+            for r in results:
+                title = r.get("title", "").strip()
+                body = r.get("body", "").strip()
+                if title and body:
+                    formatted.append(f"{title}\n{body}")
+            return "\n\n".join(formatted) if formatted else "No results found."
     except Exception as e:
         return f"Search error: {str(e)}"
 
@@ -59,7 +69,8 @@ def create_basic_agent(model_name: str = "MiniMax-M2.7") -> dict[str, Any]:
     )
 
     # Concise system prompt for conversational agent
-    system_prompt = """You are All_in_AI, a helpful, friendly AI assistant.
+    system_prompt = f"""You are All_in_AI, a helpful, friendly AI assistant.
+Current date: {date.today().isoformat()}
 
 ## 回答风格
 - 简洁直接，不需要废话
@@ -77,6 +88,7 @@ def create_basic_agent(model_name: str = "MiniMax-M2.7") -> dict[str, Any]:
 ## 限制
 - 不确定的事实主动去搜索确认
 - 复杂问题先问清楚再答
+- 搜索只用一次，不要重复搜索同一问题
 """
 
     graph = create_deep_agent(
