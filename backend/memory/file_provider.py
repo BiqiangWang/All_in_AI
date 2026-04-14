@@ -60,7 +60,7 @@ class FileMemoryProvider(MemoryProvider):
         return [
             {
                 "name": "memory",
-                "description": "Read from or write to memory store. Supports both agent memory and user profile.",
+                "description": "Read from or write to memory store. Use write to store important information that should be remembered.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -71,16 +71,20 @@ class FileMemoryProvider(MemoryProvider):
                         },
                         "action": {
                             "type": "string",
-                            "enum": ["read", "add", "replace", "remove"],
-                            "description": "Action to perform"
+                            "enum": ["read", "write"],
+                            "description": "'read' to retrieve memory, 'write' to store memory"
                         },
                         "content": {
                             "type": "string",
-                            "description": "Content to add or replace"
+                            "description": "Content to write to memory (required for write action)"
                         },
-                        "old_text": {
-                            "type": "string",
-                            "description": "Old text to replace (for replace action)"
+                        "start_line": {
+                            "type": "integer",
+                            "description": "Start line number (1-indexed, inclusive). Required for write action."
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "description": "End line number (1-indexed, inclusive). Required for write action. If exceeds file length, truncates to last line."
                         }
                     },
                     "required": ["target", "action"]
@@ -107,16 +111,13 @@ class FileMemoryProvider(MemoryProvider):
         if action == "read":
             content = file_path.read_text(encoding="utf-8")
             return self._build_memory_context_block(content)
-        elif action == "add":
+        elif action == "write":
+            start_line = args.get("start_line")
+            end_line = args.get("end_line")
+            if start_line is None or end_line is None:
+                raise ValueError("start_line and end_line are required")
             content = args.get("content", "")
-            return self._atomic_append(file_path, content)
-        elif action == "replace":
-            old_text = args.get("old_text", "")
-            new_content = args.get("content", "")
-            return self._atomic_replace(file_path, old_text, new_content)
-        elif action == "remove":
-            old_text = args.get("old_text", "")
-            return self._atomic_replace(file_path, old_text, "")
+            return self._atomic_write_range(file_path, start_line, end_line, content)
         raise ValueError(f"Unknown action: {action}")
 
     def _build_memory_context_block(self, raw_context: str) -> str:
@@ -161,3 +162,20 @@ class FileMemoryProvider(MemoryProvider):
             new_content = current.replace(old_text, new_text, 1)
             self._atomic_write(file_path, new_content)
             return f"Updated {file_path.name}"
+
+    def _atomic_write_range(self, file_path: Path, start_line: int, end_line: int, content: str) -> str:
+        """原子写入指定行范围：替换 start_line 到 end_line (1-indexed, inclusive)"""
+        with self._lock:
+            current = file_path.read_text(encoding="utf-8")
+            lines = current.splitlines(keepends=True)
+            # Handle case where end_line exceeds file length
+            if end_line > len(lines):
+                end_line = len(lines)
+            if start_line < 1:
+                start_line = 1
+            # Convert to 0-indexed
+            start_idx = start_line - 1
+            end_idx = end_line
+            new_lines = lines[:start_idx] + [content + "\n"] + lines[end_idx:]
+            self._atomic_write(file_path, "".join(new_lines))
+            return f"Wrote to {file_path.name} lines {start_line}-{end_line}"
