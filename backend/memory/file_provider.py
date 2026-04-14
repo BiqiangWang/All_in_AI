@@ -1,9 +1,34 @@
 # backend/memory/file_provider.py
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Any
 from .provider import MemoryProvider
+
+
+# 安全扫描相关
+INJECTION_PATTERNS = [
+    re.compile(r"ignore\s+previous\s+instructions", re.IGNORECASE),
+    re.compile(r"disregard\s+all\s+prior", re.IGNORECASE),
+    re.compile(r"<\|im_end\|>", re.IGNORECASE),
+    re.compile(r"SYSTEM:", re.IGNORECASE),
+]
+
+ZERO_WIDTH_CHARS = re.compile(r"[\u200b\u200c\u200d\ufeff]")
+
+
+def _scan_content(content: str) -> tuple[bool, str]:
+    """扫描内容安全，返回 (is_safe, cleaned_content)"""
+    # 移除零宽字符
+    cleaned = ZERO_WIDTH_CHARS.sub("", content)
+
+    # 检测注入模式
+    for pattern in INJECTION_PATTERNS:
+        if pattern.search(cleaned):
+            return False, cleaned
+
+    return True, cleaned
 
 
 class FileMemoryProvider(MemoryProvider):
@@ -95,14 +120,23 @@ class FileMemoryProvider(MemoryProvider):
             return self._build_memory_context_block(content)
         elif action == "add":
             content = args.get("content", "")
-            return self._atomic_append(self._memory_file, content)
+            try:
+                return self._atomic_append(self._memory_file, content)
+            except ValueError as e:
+                return f"Error: {e}"
         elif action == "replace":
             old_text = args.get("old_text", "")
             new_content = args.get("content", "")
-            return self._atomic_replace(self._memory_file, old_text, new_content)
+            try:
+                return self._atomic_replace(self._memory_file, old_text, new_content)
+            except ValueError as e:
+                return f"Error: {e}"
         elif action == "remove":
             old_text = args.get("old_text", "")
-            return self._atomic_replace(self._memory_file, old_text, "")
+            try:
+                return self._atomic_replace(self._memory_file, old_text, "")
+            except ValueError as e:
+                return f"Error: {e}"
         return "Unknown action"
 
     def _handle_user_profile(self, args: dict[str, Any]) -> str:
@@ -112,14 +146,23 @@ class FileMemoryProvider(MemoryProvider):
             return self._build_memory_context_block(content)
         elif action == "add":
             content = args.get("content", "")
-            return self._atomic_append(self._user_file, content)
+            try:
+                return self._atomic_append(self._user_file, content)
+            except ValueError as e:
+                return f"Error: {e}"
         elif action == "replace":
             old_text = args.get("old_text", "")
             new_content = args.get("content", "")
-            return self._atomic_replace(self._user_file, old_text, new_content)
+            try:
+                return self._atomic_replace(self._user_file, old_text, new_content)
+            except ValueError as e:
+                return f"Error: {e}"
         elif action == "remove":
             old_text = args.get("old_text", "")
-            return self._atomic_replace(self._user_file, old_text, "")
+            try:
+                return self._atomic_replace(self._user_file, old_text, "")
+            except ValueError as e:
+                return f"Error: {e}"
         return "Unknown action"
 
     def _build_memory_context_block(self, raw_context: str) -> str:
@@ -136,8 +179,12 @@ class FileMemoryProvider(MemoryProvider):
 
     def _atomic_write(self, file_path: Path, content: str) -> None:
         """原子写入：写入临时文件后原子替换目标文件"""
+        is_safe, cleaned = _scan_content(content)
+        if not is_safe:
+            raise ValueError("Content blocked by security scan")
+
         temp_path = file_path.with_suffix(".tmp")
-        temp_path.write_text(content, encoding="utf-8")
+        temp_path.write_text(cleaned, encoding="utf-8")
         temp_path.replace(file_path)  # 原子替换
 
     def _atomic_append(self, file_path: Path, content: str) -> str:
