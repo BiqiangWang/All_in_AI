@@ -6,9 +6,10 @@ class MemoryProvider(ABC):
     """记忆 Provider 抽象基类，参考 hermes-agent 设计"""
 
     @property
+    @abstractmethod
     def name(self) -> str:
         """Provider 名称"""
-        return "base"
+        ...
 
     @abstractmethod
     def is_available(self) -> bool:
