@@ -60,10 +60,15 @@ class FileMemoryProvider(MemoryProvider):
         return [
             {
                 "name": "memory",
-                "description": "Read from or write to agent memory. Memory persists across sessions.",
+                "description": "Read from or write to memory store. Supports both agent memory and user profile.",
                 "parameters": {
                     "type": "object",
                     "properties": {
+                        "target": {
+                            "type": "string",
+                            "enum": ["agent", "user"],
+                            "description": "Which memory store: 'agent' for agent memory, 'user' for user profile"
+                        },
                         "action": {
                             "type": "string",
                             "enum": ["read", "add", "replace", "remove"],
@@ -78,30 +83,7 @@ class FileMemoryProvider(MemoryProvider):
                             "description": "Old text to replace (for replace action)"
                         }
                     },
-                    "required": ["action"]
-                }
-            },
-            {
-                "name": "user_profile",
-                "description": "Read from or write to user profile. Stores user preferences and context.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {
-                            "type": "string",
-                            "enum": ["read", "add", "replace", "remove"],
-                            "description": "Action to perform"
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "Content to add or replace"
-                        },
-                        "old_text": {
-                            "type": "string",
-                            "description": "Old text to replace (for replace action)"
-                        }
-                    },
-                    "required": ["action"]
+                    "required": ["target", "action"]
                 }
             }
         ]
@@ -109,60 +91,32 @@ class FileMemoryProvider(MemoryProvider):
     def handle_tool_call(self, tool_name: str, args: dict[str, Any]) -> str:
         if tool_name == "memory":
             return self._handle_memory(args)
-        elif tool_name == "user_profile":
-            return self._handle_user_profile(args)
         return "Unknown tool"
 
     def _handle_memory(self, args: dict[str, Any]) -> str:
+        target = args.get("target")
         action = args.get("action")
-        if action == "read":
-            content = self._memory_file.read_text(encoding="utf-8")
-            return self._build_memory_context_block(content)
-        elif action == "add":
-            content = args.get("content", "")
-            try:
-                return self._atomic_append(self._memory_file, content)
-            except ValueError as e:
-                return f"Error: {e}"
-        elif action == "replace":
-            old_text = args.get("old_text", "")
-            new_content = args.get("content", "")
-            try:
-                return self._atomic_replace(self._memory_file, old_text, new_content)
-            except ValueError as e:
-                return f"Error: {e}"
-        elif action == "remove":
-            old_text = args.get("old_text", "")
-            try:
-                return self._atomic_replace(self._memory_file, old_text, "")
-            except ValueError as e:
-                return f"Error: {e}"
-        return "Unknown action"
 
-    def _handle_user_profile(self, args: dict[str, Any]) -> str:
-        action = args.get("action")
+        if target == "agent":
+            file_path = self._memory_file
+        elif target == "user":
+            file_path = self._user_file
+        else:
+            return "Invalid target. Use 'agent' or 'user'."
+
         if action == "read":
-            content = self._user_file.read_text(encoding="utf-8")
+            content = file_path.read_text(encoding="utf-8")
             return self._build_memory_context_block(content)
         elif action == "add":
             content = args.get("content", "")
-            try:
-                return self._atomic_append(self._user_file, content)
-            except ValueError as e:
-                return f"Error: {e}"
+            return self._atomic_append(file_path, content)
         elif action == "replace":
             old_text = args.get("old_text", "")
             new_content = args.get("content", "")
-            try:
-                return self._atomic_replace(self._user_file, old_text, new_content)
-            except ValueError as e:
-                return f"Error: {e}"
+            return self._atomic_replace(file_path, old_text, new_content)
         elif action == "remove":
             old_text = args.get("old_text", "")
-            try:
-                return self._atomic_replace(self._user_file, old_text, "")
-            except ValueError as e:
-                return f"Error: {e}"
+            return self._atomic_replace(file_path, old_text, "")
         return "Unknown action"
 
     def _build_memory_context_block(self, raw_context: str) -> str:
