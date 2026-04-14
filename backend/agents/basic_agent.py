@@ -18,6 +18,18 @@ def _get_memory_provider():
     """Lazy initialization of memory provider."""
     global _memory_provider
     if _memory_provider is None:
+        import sys
+        from pathlib import Path
+
+        # Add project root to path so 'backend' package is importable
+        # backend/agents/basic_agent.py -> backend/ -> project root
+        project_root = Path(__file__).parent.parent.parent
+        backend_dir = Path(__file__).parent.parent
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        if str(backend_dir) not in sys.path:
+            sys.path.insert(0, str(backend_dir))
+
         from backend.memory.file_provider import FileMemoryProvider
         _memory_provider = FileMemoryProvider()
     return _memory_provider
@@ -66,31 +78,46 @@ def search_web(query: str = Field(description="The search query to look up on th
 
 @tool
 def memory(target: str = Field(description="Target store: 'agent' for agent memory, 'user' for user profile"),
-           action: str = Field(description="Action to perform: read, add, replace, or remove"),
-           content: str = Field(default=None, description="Content to add or replace"),
-           old_text: str = Field(default=None, description="Old text to replace (for replace/remove actions)")) -> str:
+           action: str = Field(description="Action: 'read' or 'write'"),
+           content: str = Field(default=None, description="Content to write (required for write)"),
+           start_line: int = Field(default=None, description="Start line number (1-indexed, inclusive). Required for write."),
+           end_line: int = Field(default=None, description="End line number (1-indexed, inclusive). Required for write. If exceeds file length, truncates to last line.")) -> str:
     """Read from or write to memory store.
 
-    Use this tool to store and retrieve persistent information that the agent
-    should remember across conversations, such as user preferences, facts,
-    or important context. The target parameter specifies which store to use.
+    Use read to retrieve all stored memory. Use write to store new information by replacing a specific line range.
 
-    Targets:
-    - agent: Agent memory - stores agent's own knowledge and context
-    - user: User profile - stores user preferences and context
-
-    Actions:
-    - read: Retrieve all current memory content
-    - add: Append new content to memory
-    - replace: Replace specific old text with new content
-    - remove: Remove specific text from memory
+    Examples:
+    - Read user memory: memory(target="user", action="read")
+    - Write to user memory: memory(target="user", action="write", content="New info here", start_line=3, end_line=5)
     """
     return _get_memory_provider().handle_tool_call("memory", {
         "target": target,
         "action": action,
         "content": content,
-        "old_text": old_text,
+        "start_line": start_line,
+        "end_line": end_line,
     })
+
+
+def _get_memory_context() -> str:
+    """获取记忆上下文，被 memory 工具调用和 system prompt 注入共享"""
+    import sys
+    from pathlib import Path
+
+    # Setup path same as _get_memory_provider
+    project_root = Path(__file__).parent.parent.parent
+    backend_dir = Path(__file__).parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+
+    from backend.memory.memory_manager import MemoryManager
+    from backend.memory.file_provider import FileMemoryProvider
+
+    manager = MemoryManager()
+    manager.add_provider(FileMemoryProvider())
+    return manager.get_snapshot()
 
 
 def create_basic_agent(model_name: str = "MiniMax-M2.7") -> dict[str, Any]:
@@ -112,9 +139,21 @@ def create_basic_agent(model_name: str = "MiniMax-M2.7") -> dict[str, Any]:
         base_url="https://api.minimaxi.com/anthropic",
     )
 
+    # Build memory context for injection into system prompt
+    memory_context = _get_memory_context()
+
+    # Format memory instructions for the agent
+    memory_instruction = ""
+    if memory_context:
+        memory_instruction = f"""
+## 记忆上下文
+{memory_context}
+"""
+
     # Concise system prompt for conversational agent
     system_prompt = f"""You are All_in_AI, a helpful, friendly AI assistant.
 Current date: {date.today().isoformat()}
+{memory_instruction}
 
 ## 回答风格
 - 简洁直接，不需要废话
