@@ -11,11 +11,16 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 from pydantic import Field
 
-# Import memory provider
-from backend.memory.file_provider import FileMemoryProvider
+# Lazy-loaded memory provider
+_memory_provider = None
 
-# Initialize memory provider
-_memory_provider = FileMemoryProvider()
+def _get_memory_provider():
+    """Lazy initialization of memory provider."""
+    global _memory_provider
+    if _memory_provider is None:
+        from backend.memory.file_provider import FileMemoryProvider
+        _memory_provider = FileMemoryProvider()
+    return _memory_provider
 
 # Load .env file
 _env_path = Path(__file__).parent.parent / ".env"
@@ -75,7 +80,7 @@ def memory(action: str = Field(description="Action to perform: read, add, replac
     - replace: Replace specific old text with new content
     - remove: Remove specific text from memory
     """
-    return _memory_provider.handle_tool_call("memory", {
+    return _get_memory_provider().handle_tool_call("memory", {
         "action": action,
         "content": content,
         "old_text": old_text,
@@ -97,7 +102,7 @@ def user_profile(action: str = Field(description="Action to perform: read, add, 
     - replace: Replace specific old text with new content
     - remove: Remove specific text from user profile
     """
-    return _memory_provider.handle_tool_call("user_profile", {
+    return _get_memory_provider().handle_tool_call("user_profile", {
         "action": action,
         "content": content,
         "old_text": old_text,
@@ -114,7 +119,8 @@ def create_basic_agent(model_name: str = "MiniMax-M2.7") -> dict[str, Any]:
         A dict containing the graph and metadata.
     """
     # Configure MiniMax Anthropic-compatible API
-    os.environ["ANTHROPIC_BASE_URL"] = "https://api.minimaxi.com/anthropic"
+    if "ANTHROPIC_BASE_URL" not in os.environ:
+        os.environ["ANTHROPIC_BASE_URL"] = "https://api.minimaxi.com/anthropic"
 
     model = ChatAnthropic(
         model=model_name,
@@ -146,7 +152,6 @@ Current date: {date.today().isoformat()}
 """
 
     # Use FilesystemBackend for skill loading
-    skills_root = Path(__file__).parent.parent / "skills"
     backend = FilesystemBackend(root_dir=str(skills_root), virtual_mode=True)
 
     graph = create_deep_agent(
@@ -179,7 +184,6 @@ def get_skills_metadata() -> list[dict]:
     """扫描 skills 目录，返回 skill 元数据列表"""
     import re
 
-    skills_root = Path(__file__).parent.parent / "skills"
     if not skills_root.exists():
         return []
 
