@@ -3,6 +3,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: aegra-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -16,35 +17,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.backend
-    ports:
-      - "2026:2026"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/aegra
-      REDIS_BROKER_ENABLED: "false"
-    env_file:
-      - backend/.env
-    volumes:
-      - ./backend/agents:/app/agents
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.frontend
-    ports:
-      - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:2026
-      NEXT_PUBLIC_ASSISTANT_ID: all-in-ai
-    depends_on:
-      - backend
 
 volumes:
   postgres_data:

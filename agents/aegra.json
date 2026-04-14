@@ -1,6 +1,6 @@
 {
   "graphs": {
-    "all-in-ai": "./agents/basic_agent.py:graph"
+    "all-in-ai": "./basic_agent.py:graph"
   },
   "auth": {
     "enabled": false
