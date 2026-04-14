@@ -22,28 +22,39 @@ def test_get_tools():
     with tempfile.TemporaryDirectory() as tmpdir:
         provider = FileMemoryProvider(memory_dir=tmpdir)
         tools = provider.get_tools()
-        assert len(tools) >= 2
-        tool_names = [t["name"] for t in tools]
-        assert "memory" in tool_names
-        assert "user_profile" in tool_names
+        assert len(tools) == 1
+        assert tools[0]["name"] == "memory"
+        params = tools[0]["parameters"]["properties"]
+        assert "target" in params
+        assert "action" in params
 
 
-def test_memory_read_write():
+def test_memory_operations():
     with tempfile.TemporaryDirectory() as tmpdir:
         provider = FileMemoryProvider(memory_dir=tmpdir)
 
-        # Write
+        # Write to agent memory
         result = provider.handle_tool_call("memory", {
+            "target": "agent",
             "action": "add",
-            "content": "Test memory content"
+            "content": "Test agent memory"
         })
-        assert "success" in result.lower() or "added" in result.lower()
+        assert "added" in result.lower()
 
-        # Read
+        # Write to user profile
         result = provider.handle_tool_call("memory", {
+            "target": "user",
+            "action": "add",
+            "content": "Test user profile"
+        })
+        assert "added" in result.lower()
+
+        # Read agent memory
+        result = provider.handle_tool_call("memory", {
+            "target": "agent",
             "action": "read"
         })
-        assert "Test memory content" in result
+        assert "Test agent memory" in result
 
 
 def test_atomic_write():
@@ -54,6 +65,7 @@ def test_atomic_write():
         # 写入大量内容
         large_content = "x" * 10000
         provider.handle_tool_call("memory", {
+            "target": "agent",
             "action": "add",
             "content": large_content
         })
