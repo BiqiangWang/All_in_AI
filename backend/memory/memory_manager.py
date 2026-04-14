@@ -28,14 +28,18 @@ class MemoryManager:
             for tool in provider.get_tools():
                 if tool["name"] == "memory":
                     try:
-                        result = provider.handle_tool_call("memory", {"action": "read"})
-                        if result:
-                            parts.append(result)
+                        # Read both agent and user memory
+                        agent_result = provider.handle_tool_call("memory", {"target": "agent", "action": "read"})
+                        user_result = provider.handle_tool_call("memory", {"target": "user", "action": "read"})
+                        if agent_result:
+                            parts.append(agent_result)
+                        if user_result:
+                            parts.append(user_result)
                     except Exception as e:
                         print(f"Error reading memory: {e}")
                 elif tool["name"] == "user_profile":
                     try:
-                        result = provider.handle_tool_call("user_profile", {"action": "read"})
+                        result = provider.handle_tool_call("user_profile", {"target": "user", "action": "read"})
                         if result:
                             parts.append(result)
                     except Exception as e:
