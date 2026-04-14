@@ -12,33 +12,44 @@ class MemoryManager:
         self._prefetch_cache: str | None = None
         self._prefetch_lock = threading.Lock()
 
-    def take_snapshot(self) -> str:
-        """在会话开始时生成系统提示词快照"""
+    def get_snapshot(self) -> str:
+        """获取快照，如果还没生成则生成"""
+        if self._snapshot is None:
+            with self._prefetch_lock:
+                # 双重检查
+                if self._snapshot is None:
+                    self._snapshot = self._take_snapshot_impl()
+        return self._snapshot
+
+    def _take_snapshot_impl(self) -> str:
+        """实际生成快照的内部方法"""
         parts = []
         for provider in self._providers:
             for tool in provider.get_tools():
                 if tool["name"] == "memory":
-                    result = provider.handle_tool_call("memory", {"action": "read"})
-                    if result:
-                        parts.append(result)
+                    try:
+                        result = provider.handle_tool_call("memory", {"action": "read"})
+                        if result:
+                            parts.append(result)
+                    except Exception as e:
+                        print(f"Error reading memory: {e}")
                 elif tool["name"] == "user_profile":
-                    result = provider.handle_tool_call("user_profile", {"action": "read"})
-                    if result:
-                        parts.append(result)
-        self._snapshot = "\n\n".join(parts)
-        return self._snapshot
+                    try:
+                        result = provider.handle_tool_call("user_profile", {"action": "read"})
+                        if result:
+                            parts.append(result)
+                    except Exception as e:
+                        print(f"Error reading user_profile: {e}")
+        return "\n\n".join(parts)
 
-    def get_snapshot(self) -> str:
-        """获取快照，如果还没生成则生成"""
-        if self._snapshot is None:
-            return self.take_snapshot()
-        return self._snapshot
-
-    def prefetch(self, query: str) -> None:
+    def prefetch(self) -> None:
         """后台预取相关记忆"""
         def _run():
-            with self._prefetch_lock:
-                self._prefetch_cache = self.get_snapshot()
+            try:
+                with self._prefetch_lock:
+                    self._prefetch_cache = self.get_snapshot()
+            except Exception as e:
+                print(f"Prefetch error: {e}")
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
