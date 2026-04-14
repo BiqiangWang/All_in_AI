@@ -134,22 +134,28 @@ class FileMemoryProvider(MemoryProvider):
             "</memory-context>"
         )
 
+    def _atomic_write(self, file_path: Path, content: str) -> None:
+        """原子写入：写入临时文件后原子替换目标文件"""
+        temp_path = file_path.with_suffix(".tmp")
+        temp_path.write_text(content, encoding="utf-8")
+        temp_path.replace(file_path)  # 原子替换
+
     def _atomic_append(self, file_path: Path, content: str) -> str:
         """原子追加写入：临时文件 + 重命名"""
         with self._lock:
             current = file_path.read_text(encoding="utf-8")
             new_content = current.rstrip() + "\n\n" + content
-            file_path.write_text(new_content, encoding="utf-8")
+            self._atomic_write(file_path, new_content)
             return f"Added to {file_path.name}"
 
     def _atomic_replace(self, file_path: Path, old_text: str, new_text: str) -> str:
-        """原子替换：临时文件 + 重命名"""
+        """原子替换：临时文件 + 重命名，只替换第一个匹配项"""
         if not old_text:
             return "old_text is required for replace action"
         with self._lock:
             current = file_path.read_text(encoding="utf-8")
             if old_text not in current:
                 return f"Old text not found in {file_path.name}"
-            new_content = current.replace(old_text, new_text)
-            file_path.write_text(new_content, encoding="utf-8")
+            new_content = current.replace(old_text, new_text, 1)
+            self._atomic_write(file_path, new_content)
             return f"Updated {file_path.name}"
