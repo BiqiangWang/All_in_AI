@@ -41,7 +41,7 @@ class FileMemoryProvider(MemoryProvider):
         self._memory_dir.mkdir(exist_ok=True)
         self._memory_file = self._memory_dir / "MEMORY.md"
         self._user_file = self._memory_dir / "USER.md"
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # 确保文件存在
         if not self._memory_file.exists():
@@ -102,7 +102,7 @@ class FileMemoryProvider(MemoryProvider):
         elif target == "user":
             file_path = self._user_file
         else:
-            return "Invalid target. Use 'agent' or 'user'."
+            raise ValueError("Invalid target. Use 'agent' or 'user'.")
 
         if action == "read":
             content = file_path.read_text(encoding="utf-8")
@@ -117,7 +117,7 @@ class FileMemoryProvider(MemoryProvider):
         elif action == "remove":
             old_text = args.get("old_text", "")
             return self._atomic_replace(file_path, old_text, "")
-        return "Unknown action"
+        raise ValueError(f"Unknown action: {action}")
 
     def _build_memory_context_block(self, raw_context: str) -> str:
         """用 fence 标签包裹记忆内容，防止被误当用户输入"""
@@ -137,9 +137,10 @@ class FileMemoryProvider(MemoryProvider):
         if not is_safe:
             raise ValueError("Content blocked by security scan")
 
-        temp_path = file_path.with_suffix(".tmp")
-        temp_path.write_text(cleaned, encoding="utf-8")
-        temp_path.replace(file_path)  # 原子替换
+        with self._lock:
+            temp_path = file_path.with_suffix(".tmp")
+            temp_path.write_text(cleaned, encoding="utf-8")
+            temp_path.replace(file_path)  # 原子替换
 
     def _atomic_append(self, file_path: Path, content: str) -> str:
         """原子追加写入：临时文件 + 重命名"""
@@ -152,11 +153,11 @@ class FileMemoryProvider(MemoryProvider):
     def _atomic_replace(self, file_path: Path, old_text: str, new_text: str) -> str:
         """原子替换：临时文件 + 重命名，只替换第一个匹配项"""
         if not old_text:
-            return "old_text is required for replace action"
+            raise ValueError("old_text is required for replace action")
         with self._lock:
             current = file_path.read_text(encoding="utf-8")
             if old_text not in current:
-                return f"Old text not found in {file_path.name}"
+                raise ValueError(f"Old text not found in {file_path.name}")
             new_content = current.replace(old_text, new_text, 1)
             self._atomic_write(file_path, new_content)
             return f"Updated {file_path.name}"
