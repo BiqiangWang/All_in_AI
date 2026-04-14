@@ -11,6 +11,12 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 from pydantic import Field
 
+# Import memory provider
+from backend.memory.file_provider import FileMemoryProvider
+
+# Initialize memory provider
+_memory_provider = FileMemoryProvider()
+
 # Load .env file
 _env_path = Path(__file__).parent.parent / ".env"
 if _env_path.exists():
@@ -51,6 +57,51 @@ def search_web(query: str = Field(description="The search query to look up on th
             return "\n\n".join(formatted) if formatted else "No results found."
     except Exception as e:
         return f"Search error: {str(e)}"
+
+
+@tool
+def memory(action: str = Field(description="Action to perform: read, add, replace, or remove"),
+           content: str = Field(default=None, description="Content to add or replace"),
+           old_text: str = Field(default=None, description="Old text to replace (for replace action)")) -> str:
+    """Read from or write to agent memory. Memory persists across sessions.
+
+    Use this tool to store and retrieve persistent information that the agent
+    should remember across conversations, such as user preferences, facts,
+    or important context.
+
+    Actions:
+    - read: Retrieve all current memory content
+    - add: Append new content to memory
+    - replace: Replace specific old text with new content
+    - remove: Remove specific text from memory
+    """
+    return _memory_provider.handle_tool_call("memory", {
+        "action": action,
+        "content": content,
+        "old_text": old_text,
+    })
+
+
+@tool
+def user_profile(action: str = Field(description="Action to perform: read, add, replace, or remove"),
+                 content: str = Field(default=None, description="Content to add or replace"),
+                 old_text: str = Field(default=None, description="Old text to replace (for replace action)")) -> str:
+    """Read from or write to user profile. Stores user preferences and context.
+
+    Use this tool to store and retrieve information about the user, such as
+    their name, preferences, background, or other relevant context.
+
+    Actions:
+    - read: Retrieve all current user profile content
+    - add: Append new content to user profile
+    - replace: Replace specific old text with new content
+    - remove: Remove specific text from user profile
+    """
+    return _memory_provider.handle_tool_call("user_profile", {
+        "action": action,
+        "content": content,
+        "old_text": old_text,
+    })
 
 
 def create_basic_agent(model_name: str = "MiniMax-M2.7") -> dict[str, Any]:
@@ -100,7 +151,7 @@ Current date: {date.today().isoformat()}
 
     graph = create_deep_agent(
         model=model,
-        tools=[search_web],
+        tools=[search_web, memory, user_profile],
         system_prompt=system_prompt,
         backend=backend,
         skills=["/nuwa/", "/elon-musk/", "/trump/", "/zhangxuefeng/"],
