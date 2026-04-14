@@ -165,17 +165,19 @@ class FileMemoryProvider(MemoryProvider):
 
     def _atomic_write_range(self, file_path: Path, start_line: int, end_line: int, content: str) -> str:
         """原子写入指定行范围：替换 start_line 到 end_line (1-indexed, inclusive)"""
+        is_safe, cleaned = _scan_content(content)
+        if not is_safe:
+            raise ValueError("Content blocked by security scan")
+
         with self._lock:
             current = file_path.read_text(encoding="utf-8")
             lines = current.splitlines(keepends=True)
             # Handle case where end_line exceeds file length
-            if end_line > len(lines):
-                end_line = len(lines)
+            end_idx = min(end_line, len(lines)) - 1
             if start_line < 1:
                 start_line = 1
-            # Convert to 0-indexed
             start_idx = start_line - 1
-            end_idx = end_line
-            new_lines = lines[:start_idx] + [content + "\n"] + lines[end_idx:]
+
+            new_lines = lines[:start_idx] + [cleaned] + lines[end_idx:]
             self._atomic_write(file_path, "".join(new_lines))
-            return f"Wrote to {file_path.name} lines {start_line}-{end_line}"
+            return f"Updated {file_path.name} lines {start_line}-{end_line}"
