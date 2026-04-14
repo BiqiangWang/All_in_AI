@@ -65,14 +65,19 @@ def search_web(query: str = Field(description="The search query to look up on th
 
 
 @tool
-def memory(action: str = Field(description="Action to perform: read, add, replace, or remove"),
+def memory(target: str = Field(description="Target store: 'agent' for agent memory, 'user' for user profile"),
+           action: str = Field(description="Action to perform: read, add, replace, or remove"),
            content: str = Field(default=None, description="Content to add or replace"),
-           old_text: str = Field(default=None, description="Old text to replace (for replace action)")) -> str:
-    """Read from or write to agent memory. Memory persists across sessions.
+           old_text: str = Field(default=None, description="Old text to replace (for replace/remove actions)")) -> str:
+    """Read from or write to memory store.
 
     Use this tool to store and retrieve persistent information that the agent
     should remember across conversations, such as user preferences, facts,
-    or important context.
+    or important context. The target parameter specifies which store to use.
+
+    Targets:
+    - agent: Agent memory - stores agent's own knowledge and context
+    - user: User profile - stores user preferences and context
 
     Actions:
     - read: Retrieve all current memory content
@@ -81,28 +86,7 @@ def memory(action: str = Field(description="Action to perform: read, add, replac
     - remove: Remove specific text from memory
     """
     return _get_memory_provider().handle_tool_call("memory", {
-        "action": action,
-        "content": content,
-        "old_text": old_text,
-    })
-
-
-@tool
-def user_profile(action: str = Field(description="Action to perform: read, add, replace, or remove"),
-                 content: str = Field(default=None, description="Content to add or replace"),
-                 old_text: str = Field(default=None, description="Old text to replace (for replace action)")) -> str:
-    """Read from or write to user profile. Stores user preferences and context.
-
-    Use this tool to store and retrieve information about the user, such as
-    their name, preferences, background, or other relevant context.
-
-    Actions:
-    - read: Retrieve all current user profile content
-    - add: Append new content to user profile
-    - replace: Replace specific old text with new content
-    - remove: Remove specific text from user profile
-    """
-    return _get_memory_provider().handle_tool_call("user_profile", {
+        "target": target,
         "action": action,
         "content": content,
         "old_text": old_text,
@@ -156,7 +140,7 @@ Current date: {date.today().isoformat()}
 
     graph = create_deep_agent(
         model=model,
-        tools=[search_web, memory, user_profile],
+        tools=[search_web, memory],
         system_prompt=system_prompt,
         backend=backend,
         skills=["/nuwa/", "/elon-musk/", "/trump/", "/zhangxuefeng/"],
