@@ -1,0 +1,229 @@
+---
+title: "Build your first agent"
+description: "A hands-on tutorial that walks you through building, deploying, and interacting with an AI agent on Aegra."
+---
+
+This tutorial takes you from zero to a working agent with tool use, streaming, and state persistence. By the end, you'll have a running Aegra server with an agent you can talk to through the SDK and any Agent Protocol frontend.
+
+## What you'll build
+
+A ReAct agent that can search the web and hold multi-turn conversations with full state persistence. You'll learn how to:
+
+- Scaffold a project with the CLI
+- Write a LangGraph agent
+- Register it as an assistant
+- Create threads and run conversations
+- Stream responses in real time
+- Inspect thread state and history
+
+## Prerequisites
+
+- Python 3.12+
+- Docker (for PostgreSQL)
+- An OpenAI API key
+
+## Step 1: Create the project
+
+```bash
+pip install aegra-cli
+aegra init
+```
+
+When prompted, choose the **react-agent** template. Then configure your environment:
+
+```bash
+cd <your-project>
+cp .env.example .env
+```
+
+Open `.env` and set your `OPENAI_API_KEY`.
+
+## Step 2: Understand the project structure
+
+The CLI generated this structure:
+
+```
+my-agent/
+├── aegra.json              # Registers your graph
+├── src/
+│   └── my_agent/
+│       ├── graph.py        # Agent logic and graph definition
+│       ├── state.py        # Input and internal state schemas
+│       ├── context.py      # Configurable parameters (model, prompts)
+│       ├── tools.py        # Tools the agent can use
+│       ├── prompts.py      # System prompt template
+│       └── utils.py        # Model loading helper
+├── .env.example
+├── pyproject.toml
+├── Dockerfile
+└── docker-compose.yml
+```
+
+The key file is `aegra.json`, which tells Aegra where to find your graph:
+
+```json
+{
+  "graphs": {
+    "agent": "./src/my_agent/graph.py:graph"
+  }
+}
+```
+
+The `"agent"` key is your **graph ID** — you'll use it when creating assistants.
+
+## Step 3: Start the server
+
+```bash
+uv sync
+uv run aegra dev
+```
+
+This starts PostgreSQL in Docker, runs migrations, and launches the server with hot reload. You should see:
+
+```
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:2026
+```
+
+Visit [http://localhost:2026/docs](http://localhost:2026/docs) to see all available endpoints.
+
+## Step 4: Create an assistant
+
+An assistant is a configured instance of a graph. You create one via the SDK:
+
+```python
+import asyncio
+from langgraph_sdk import get_client
+
+
+async def main():
+    client = get_client(url="http://localhost:2026")
+
+    # Create an assistant from your graph
+    assistant = await client.assistants.create(
+        graph_id="agent",
+        name="My Search Agent",
+        metadata={"purpose": "web search"},
+    )
+    print(f"Assistant ID: {assistant['assistant_id']}")
+
+
+asyncio.run(main())
+```
+
+Aegra also creates a default assistant for each graph on startup, so you can skip this step and use the graph ID directly in runs.
+
+## Step 5: Create a thread and run a conversation
+
+A thread represents a conversation. Each run executes the agent within a thread, and state is persisted between runs.
+
+```python
+import asyncio
+from langgraph_sdk import get_client
+
+
+async def main():
+    client = get_client(url="http://localhost:2026")
+
+    # Create a thread
+    thread = await client.threads.create()
+    print(f"Thread ID: {thread['thread_id']}")
+
+    # Run the agent with streaming
+    async for chunk in client.runs.stream(
+        thread_id=thread["thread_id"],
+        assistant_id="agent",  # graph ID works as assistant ID
+        input={"messages": [{"type": "human", "content": "What is Aegra?"}]},
+        stream_mode=["messages-tuple"],
+    ):
+        if hasattr(chunk, "data") and chunk.data:
+            print(chunk.data)
+
+
+asyncio.run(main())
+```
+
+The agent processes your message, potentially uses tools, and streams the response back as Server-Sent Events.
+
+## Step 6: Continue the conversation
+
+Because state is persisted in the thread, you can send follow-up messages:
+
+```python
+async def continue_conversation():
+    client = get_client(url="http://localhost:2026")
+
+    thread_id = "your-thread-id-from-step-5"
+
+    # Follow-up — the agent remembers the previous exchange
+    async for chunk in client.runs.stream(
+        thread_id=thread_id,
+        assistant_id="agent",
+        input={"messages": [{"type": "human", "content": "Tell me more about its features"}]},
+        stream_mode=["messages-tuple"],
+    ):
+        if hasattr(chunk, "data") and chunk.data:
+            print(chunk.data)
+
+
+asyncio.run(continue_conversation())
+```
+
+The agent has full access to the conversation history from the thread's checkpoint.
+
+## Step 7: Inspect thread state
+
+You can inspect the full state of any thread at any point:
+
+```python
+async def inspect_state():
+    client = get_client(url="http://localhost:2026")
+
+    thread_id = "your-thread-id"
+
+    # Get current state
+    state = await client.threads.get_state(thread_id)
+    print("Current values:", state["values"])
+    print("Next nodes:", state["next"])
+
+    # Get history (all checkpoints)
+    history = await client.threads.get_history(thread_id)
+    print(f"Total checkpoints: {len(history)}")
+    for entry in history:
+        print(f"  Checkpoint: {entry['checkpoint']['checkpoint_id']}")
+
+
+asyncio.run(inspect_state())
+```
+
+## Step 8: Connect a frontend
+
+Your server implements the Agent Protocol, so you can connect any compatible frontend. Try [Agent Chat UI](https://github.com/langchain-ai/agent-chat-ui):
+
+```bash
+git clone https://github.com/langchain-ai/agent-chat-ui.git
+cd agent-chat-ui
+pnpm install
+pnpm dev
+```
+
+Open [http://localhost:5173](http://localhost:5173), point it at `http://localhost:2026`, and you have a full chat interface.
+
+## What's next
+
+You've got a working agent with persistence, streaming, and tool use. Here's where to go from here:
+
+<CardGroup cols={2}>
+  <Card title="Human-in-the-loop" icon="hand" href="/guides/human-in-the-loop">
+    Add approval gates before tool execution.
+  </Card>
+  <Card title="Streaming" icon="signal-stream" href="/guides/streaming">
+    Understand stream modes and reconnection.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Add JWT, OAuth, or Firebase auth.
+  </Card>
+  <Card title="Deployment" icon="cloud" href="/guides/deployment">
+    Deploy to Docker, PaaS, or Kubernetes.
+  </Card>
+</CardGroup>

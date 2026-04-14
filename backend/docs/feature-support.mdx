@@ -1,0 +1,130 @@
+---
+title: "Feature support"
+description: "What Aegra supports today, what's coming soon, and what's not yet planned."
+---
+
+## Status definitions
+
+| Status | Meaning |
+|:--|:--|
+| **Supported** | Available in the current release and tested. |
+| **Coming soon** | Actively being worked on or has a concrete plan. |
+| **Not yet planned** | Not on the immediate roadmap. May be added based on demand. |
+
+## Feature matrix
+
+### Assistants and graphs
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Assistants CRUD | Supported | Create, read, update, delete, and search assistants. |
+| Assistant versioning | Supported | Each update creates a new version. Pin or roll back. |
+| Graph schemas | Supported | Input, output, state, and config schemas exposed via API. |
+| Graph visualization | Supported | Mermaid graph structure returned by the API. |
+
+### Threads and state
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Thread CRUD | Supported | Create, read, update, delete, and search threads. |
+| State persistence | Supported | PostgreSQL checkpoints via LangGraph. |
+| Thread state inspection | Supported | Get current state, values, and next nodes for any thread. |
+| Thread history | Supported | Full checkpoint history with replay capability. |
+
+### Runs and execution
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Background runs | Supported | Non-blocking execution with polling. |
+| Streaming (7 SSE modes) | Supported | values, updates, messages, messages-tuple, custom, events, and debug. |
+| SSE reconnection | Supported | Resume interrupted streams from where they left off. |
+| Sync wait | Supported | Block until run completes and return final output. |
+| Subgraph streaming | Supported | Stream events from nested subgraphs. |
+| Stateless runs | Supported | Execute without persisting thread state. |
+| Cron / scheduled jobs | Coming soon | Trigger runs on a schedule. |
+
+### Scaling and reliability
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Worker job queue | Supported | Redis BLPOP with configurable worker count and concurrency. |
+| Concurrent execution | Supported | Up to `N_JOBS_PER_WORKER` (default 10) concurrent runs per worker. |
+| Lease-based crash recovery | Supported | Automatic re-execution of runs from crashed workers via checkpoint resumption. |
+| Cross-instance cancel | Supported | Cancel propagates via Redis pub/sub to any instance. |
+| Job timeout | Supported | Configurable max execution time (default 1 hour). |
+| Postgres fallback | Supported | Workers fall back to DB polling when Redis is unavailable. |
+| Multi-instance SSE | Supported | SSE streams work across instances via Redis broker. |
+
+### Human-in-the-loop
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Interrupt before / after | Supported | Pause execution at specific nodes. |
+| User approval gates | Supported | Resume or reject interrupted runs. |
+| State editing | Supported | Modify thread state before resuming. |
+
+### Storage
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Key-value store | Supported | Namespaced key-value storage with listing and search. |
+| Semantic search | Supported | Vector embeddings via pgvector. Configurable embedding models. |
+
+### Authentication and authorization
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Configurable auth handlers | Supported | Write Python functions for JWT, OAuth, Firebase, or custom schemes. |
+| Fine-grained authorization | Supported | Per-resource access control based on user identity. |
+| Studio auth bypass | Supported | Optional flag to disable auth for local development. |
+
+### Extensibility
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Custom routes | Supported | Add FastAPI endpoints alongside the Agent Protocol API. |
+| Shared dependencies | Supported | Load Python modules available to all graphs. |
+| MCP server support | Coming soon | Expose agents as Model Context Protocol servers. |
+| A2A protocol | Coming soon | Agent-to-agent communication protocol support. |
+
+### Observability
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| OpenTelemetry tracing | Supported | OTLP fan-out to multiple backends simultaneously. |
+| Langfuse integration | Supported | First-class support with environment variable config. |
+| Arize Phoenix integration | Supported | Local debugging and evaluation. |
+| Generic OTLP | Supported | Jaeger, Honeycomb, Datadog, or any OTLP backend. |
+| Console export | Supported | Log traces to stdout for debugging. |
+
+### Deployment
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Docker / Docker Compose | Supported | `aegra up` or `docker compose up`. |
+| PaaS deployment | Supported | Railway, Render, Fly.io — any platform that runs Docker. |
+| Kubernetes | Supported | Helm chart or raw manifests. |
+| Dev server with hot reload | Supported | `aegra dev` with auto-reload and managed PostgreSQL. |
+| Multi-instance scaling | Supported | Scale horizontally with shared Redis + PostgreSQL. |
+
+### Frontends
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| Agent Chat UI | Supported | Agent Protocol compatible chat interface. |
+| LangGraph Studio | Supported | Visual graph debugger and testing tool. |
+| CopilotKit | Supported | In-app copilot via AG-UI protocol. |
+
+### Not yet planned
+
+| Feature | Status | Notes |
+|:--|:--|:--|
+| RemoteGraph | Not yet planned | Call remote graphs as local subgraphs. |
+| Encryption at rest | Not yet planned | Database-level encryption. Use Postgres TDE or volume encryption. |
+| Webhook callbacks | Not yet planned | Notify external services on run completion. |
+| Rate limiting | Not yet planned | Per-user or per-key request throttling. |
+| Multi-org workspaces | Not yet planned | Tenant isolation within a single deployment. |
+
+## Request a feature
+
+Missing something? Open an issue on [GitHub](https://github.com/aegra/aegra/issues) or start a discussion on [Discord](https://discord.com/invite/D5M3ZPS25e).

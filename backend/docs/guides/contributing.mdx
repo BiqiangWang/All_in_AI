@@ -1,0 +1,288 @@
+---
+title: "Contributing"
+description: "Setup guide, code standards, and development workflow for Aegra contributors."
+---
+
+## Setup
+
+### Prerequisites
+
+- Python 3.12+
+- Docker
+- Git
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+
+### First time setup
+
+```bash
+git clone https://github.com/aegra/aegra.git
+cd aegra
+
+# Option A: Using Make (installs dependencies + git hooks)
+make dev-install
+
+# Option B: Using uv directly
+uv sync --all-packages
+uv run pre-commit install
+uv run pre-commit install --hook-type commit-msg
+```
+
+## Code quality
+
+Pre-commit hooks run automatically on every commit. They check formatting, linting, type hints, and security.
+
+### What gets checked
+
+| Check | Tool | Behavior |
+|:--|:--|:--|
+| Formatting | Ruff | Auto-formats code |
+| Linting | Ruff | Code quality rules |
+| Type checking | ty | Validates type hints (CI only) |
+| Security | Bandit | Scans for vulnerabilities |
+| Commit message | Hook | Enforces conventional format |
+
+### Commands
+
+```bash
+make format        # Auto-format code
+make lint          # Check code quality
+make type-check    # Run type checking
+make test          # Run tests
+make test-cov      # Tests with coverage
+make ci-check      # Run all CI checks locally
+make clean         # Clean cache files
+```
+
+## Commit messages
+
+**Required format:** `type(scope): description`
+
+```bash
+# Good
+git commit -m "feat: add user authentication"
+git commit -m "fix(api): resolve rate limiting bug"
+git commit -m "docs: update installation guide"
+git commit -m "test: add e2e tests for threads"
+
+# Bad
+git commit -m "fixed stuff"
+git commit -m "WIP"
+```
+
+### Types
+
+| Type | When to use |
+|:--|:--|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation |
+| `style` | Formatting only |
+| `refactor` | Code restructure |
+| `perf` | Performance improvement |
+| `test` | Tests |
+| `chore` | Maintenance |
+| `ci` | CI/CD changes |
+
+### Scope (optional)
+
+Specify the affected area: `api`, `auth`, `db`, `graph`, `tests`, `docs`, `ci`.
+
+## What happens when you commit
+
+```
+git commit -m "feat: add feature"
+         |
+    Git hooks run automatically
+         |
+  1. Ruff format    — formats code
+  2. Ruff lint      — checks quality
+  3. ty type check  — validates types (CI only)
+  4. Bandit         — security scan
+  5. File checks    — validates files
+  6. Message check  — validates commit format
+         |
+    All pass? → Commit succeeds
+```
+
+## Development workflow
+
+<Tabs>
+  <Tab title="CLI (recommended)">
+    ```bash
+    # Start everything: PostgreSQL + auto-migrations + hot reload
+    uv run aegra dev
+    ```
+  </Tab>
+  <Tab title="Docker Compose">
+    ```bash
+    docker compose up aegra
+    ```
+  </Tab>
+  <Tab title="Manual">
+    ```bash
+    # Start database
+    docker compose up postgres -d
+
+    # Start server (migrations run automatically on startup)
+    uv run --package aegra-api uvicorn aegra_api.main:app --port 2026 --reload
+    ```
+  </Tab>
+</Tabs>
+
+Visit `http://localhost:2026/docs` to see the API.
+
+<Note>
+  Migrations run automatically on server startup (`aegra dev`, Docker, or manual). You only need manual migration commands when **creating new migrations** or troubleshooting.
+</Note>
+
+## Database migrations
+
+Aegra uses Alembic for database migrations. Migrations apply automatically on server startup — you only need these commands when creating or debugging migrations.
+
+```bash
+# Create a new migration
+uv run --package aegra-api alembic revision --autogenerate -m "Add user preferences"
+
+# Apply migrations manually
+uv run --package aegra-api alembic upgrade head
+
+# Rollback last migration
+uv run --package aegra-api alembic downgrade -1
+
+# Show migration history
+uv run --package aegra-api alembic history
+
+# Show current version
+uv run --package aegra-api alembic current
+```
+
+### Making database changes
+
+1. Edit ORM models in `libs/aegra-api/src/aegra_api/core/orm.py`
+2. Generate a migration: `uv run --package aegra-api alembic revision --autogenerate -m "Description"`
+3. Review the generated file in `libs/aegra-api/alembic/versions/`
+4. Restart the server — migrations apply automatically
+
+### Testing migrations
+
+```bash
+# Test full upgrade/downgrade cycle
+uv run --package aegra-api alembic downgrade base
+uv run --package aegra-api alembic upgrade head
+```
+
+## Running tests
+
+```bash
+# API tests
+uv run --package aegra-api pytest libs/aegra-api/tests/
+
+# CLI tests
+uv run --package aegra-cli pytest libs/aegra-cli/tests/
+
+# Specific test file
+uv run --package aegra-api pytest libs/aegra-api/tests/unit/test_api/test_assistants.py
+
+# With coverage
+uv run --package aegra-api pytest libs/aegra-api/tests/ --cov=libs/aegra-api/src --cov-report=html
+```
+
+### Test levels
+
+Every feature needs tests at all applicable levels:
+
+| Level | Location | What it tests |
+|:--|:--|:--|
+| Unit | `tests/unit/` | Isolated functions with mocked dependencies |
+| Integration | `tests/integration/` | HTTP requests via FastAPI TestClient with mocked DB |
+| E2E | `tests/e2e/` | Real server + real database via LangGraph SDK |
+
+## LangGraph service architecture
+
+The `LangGraphService` manages graph loading, caching, and execution.
+
+### Design principles
+
+1. **Cache base graphs, not execution instances** — compiled graph structure (without checkpointer/store) is cached for fast loading
+2. **Fresh copies per-request** — each execution gets a fresh graph copy with checkpointer/store injected
+3. **Thread-safe by design** — no locks needed because cached state is immutable
+
+### Usage patterns
+
+**For graph execution** (runs, state operations):
+
+```python
+# Context manager yields fresh graph with checkpointer/store
+async with langgraph_service.get_graph(graph_id) as graph:
+    async for event in graph.astream(input, config):
+        ...
+```
+
+**For validation/schema extraction** (no execution needed):
+
+```python
+# Returns base graph without checkpointer/store
+graph = await langgraph_service.get_graph_for_validation(graph_id)
+schemas = extract_schemas(graph)
+```
+
+### Why this pattern
+
+| With locks (old) | Context manager (current) |
+|:--|:--|
+| Single cached instance with checkpointer | Fresh copy per request |
+| Needed locks for concurrent access | Thread-safe by design |
+| Potential race conditions | No race conditions possible |
+| Complex error handling | Simple, predictable behavior |
+
+## Pull request checklist
+
+Before creating a PR:
+
+- [ ] Git hooks installed (`make setup-hooks`)
+- [ ] All commits follow the conventional format
+- [ ] Tests pass (`make test`)
+- [ ] Code formatted (`make format`)
+- [ ] No linting errors (`make lint`)
+- [ ] PR title follows format: `type: description`
+- [ ] `make ci-check` passes
+
+## Troubleshooting
+
+### Common commit hook failures
+
+<Accordion title="Commit message format invalid">
+  ```bash
+  # Use correct format
+  git commit -m "feat: add new feature"
+  ```
+</Accordion>
+
+<Accordion title="Ruff formatting failed">
+  ```bash
+  make format     # Auto-fix formatting
+  git add .       # Stage changes
+  git commit -m "feat: add feature"  # Commit again
+  ```
+</Accordion>
+
+<Accordion title="Type checking failed">
+  ```bash
+  make type-check  # See specific errors
+  # Add type hints to fix
+  ```
+</Accordion>
+
+### Common database issues
+
+| Problem | Solution |
+|:--|:--|
+| Can't connect to database | `docker compose up postgres -d` |
+| "No such revision" error | `uv run --package aegra-api alembic current` to check state |
+| Incompatible DB version | See [PostgreSQL migration guide](/guides/postgres-migration) |
+| Database broken | `alembic downgrade base` then `alembic upgrade head` (loses data) |
+
+## Get help
+
+- **GitHub** — [Open an issue](https://github.com/aegra/aegra/issues) for bugs or feature requests.
+- **Discord** — [Join the community](https://discord.com/invite/D5M3ZPS25e) for questions and discussion.

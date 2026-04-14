@@ -1,0 +1,44 @@
+# Aegra
+
+> Open-source, self-hosted Agent Protocol server for running AI agents on your own infrastructure.
+
+Aegra is a production-ready server for running LangGraph agents with full persistence, streaming, and authentication. It uses the same LangGraph SDK and Agent Protocol APIs, so existing graph code, client libraries, and frontends (Agent Chat UI, LangGraph Studio, CopilotKit) work without modification. Self-hosted on your own PostgreSQL database with zero per-run costs, flexible auth (JWT/OAuth/Firebase), and open tracing via OpenTelemetry to any OTLP backend.
+
+## Getting started
+
+- [Introduction](introduction.mdx): Overview of Aegra and how it compares to managed platforms.
+- [Why Aegra](why-aegra.mdx): Cost comparison, feature highlights, and positioning.
+- [Quickstart](quickstart.mdx): Get a running server in under 5 minutes.
+- [Installation](installation.mdx): All the ways to install and run Aegra.
+- [Build your first agent](getting-started.mdx): Hands-on tutorial from zero to a working agent.
+- [Migrate from LangSmith Deployments](migration.mdx): Step-by-step migration guide.
+- [Feature support](feature-support.mdx): Full matrix of supported, planned, and upcoming features.
+
+## Guides
+
+- [Assistants](guides/assistants.mdx): Create, version, and manage assistants.
+- [Threads and state](guides/threads-and-state.mdx): Thread lifecycle, state persistence, and inspection.
+- [Streaming](guides/streaming.mdx): SSE stream modes, reconnection, and subgraph streaming.
+- [Human-in-the-loop](guides/human-in-the-loop.mdx): Approval gates and user intervention points.
+- [Store](guides/store.mdx): Namespaced key-value storage.
+- [Semantic store](guides/semantic-store.mdx): Vector embeddings and semantic search with pgvector.
+- [Subgraphs](guides/subgraphs.mdx): Nested graph composition and streaming.
+- [Authentication](guides/authentication.mdx): JWT, OAuth, Firebase, and custom auth handlers.
+- [Custom routes](guides/custom-routes.mdx): Add FastAPI endpoints alongside the Agent Protocol API.
+- [Dependencies](guides/dependencies.mdx): Shared Python modules across graphs.
+- [Observability](guides/observability.mdx): OpenTelemetry tracing with Langfuse, Phoenix, and OTLP.
+- [Deployment](guides/deployment.mdx): Docker, PaaS, and Kubernetes deployment.
+- [Contributing](guides/contributing.mdx): Setup guide, code standards, and development workflow for contributors.
+- [PostgreSQL 18 migration](guides/postgres-migration.mdx): Migrate local PostgreSQL data from version 15 to 18.
+
+## Reference
+
+- [Configuration](reference/configuration.mdx): Complete aegra.json reference.
+- [CLI](reference/cli.mdx): Command-line interface reference.
+- [Environment variables](reference/environment-variables.mdx): All supported environment variables.
+
+## Optional
+
+- [API reference](openapi.json): OpenAPI specification for all endpoints.
+- [GitHub](https://github.com/aegra/aegra): Source code, issues, and contributions.
+- [Discord](https://discord.com/invite/D5M3ZPS25e): Community support and discussion.

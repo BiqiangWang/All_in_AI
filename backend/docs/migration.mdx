@@ -1,0 +1,187 @@
+---
+title: "Migrate from LangSmith Deployments"
+description: "Step-by-step guide to switching from LangSmith Deployments to a self-hosted Aegra server."
+---
+
+## What stays the same
+
+Your existing investment carries over:
+
+- **Graph code** — Your LangGraph agents work without modification.
+- **SDK client calls** — `get_client()`, `client.threads`, `client.runs.stream()` — all the same.
+- **Agent Protocol frontends** — Agent Chat UI, LangGraph Studio, CopilotKit — all compatible.
+- **Thread state model** — Threads, checkpoints, and state inspection work identically.
+- **Streaming** — Same SSE modes and event format.
+- **Human-in-the-loop** — Same interrupt/resume patterns.
+
+## What changes
+
+| | LangSmith Deployments | Aegra |
+|:--|:--|:--|
+| **Config file** | `langgraph.json` | `aegra.json` (falls back to `langgraph.json`) |
+| **Client URL** | `https://your-deployment.langsmith.com` | `http://localhost:2026` (or your host) |
+| **Database** | Managed by platform | Your own PostgreSQL |
+| **Auth config** | Dashboard settings | Python handler in `aegra.json` |
+| **Tracing** | LangSmith (automatic) | OTLP via environment variables |
+| **Deploy command** | `langgraph deploy` | `aegra up` or `docker compose up` |
+
+## Step-by-step migration
+
+<Steps>
+  <Step title="Install the Aegra CLI">
+    ```bash
+    pip install aegra-cli
+    ```
+  </Step>
+
+  <Step title="Copy your graph code">
+    Copy your graph modules into a new project directory. Your LangGraph code works as-is — no changes needed.
+
+    ```bash
+    mkdir my-project && cd my-project
+    cp -r /path/to/your/graphs ./graphs
+    ```
+  </Step>
+
+  <Step title="Create aegra.json">
+    Replace your `langgraph.json` with `aegra.json`. The structure is similar:
+
+    **Before (`langgraph.json`):**
+    ```json
+    {
+      "dependencies": ["."],
+      "graphs": {
+        "agent": "./graphs/agent.py:graph"
+      }
+    }
+    ```
+
+    **After (`aegra.json`):**
+    ```json
+    {
+      "graphs": {
+        "agent": "./graphs/agent.py:graph"
+      }
+    }
+    ```
+
+    The `graphs` section is identical. Aegra also reads `langgraph.json` as a fallback, so you can skip this step initially and rename later.
+
+    <Note>
+      See the [configuration reference](/reference/configuration) for all available options including auth, HTTP, CORS, and store settings.
+    </Note>
+  </Step>
+
+  <Step title="Set up your environment">
+    Create a `.env` file with your API keys and database settings:
+
+    ```bash
+    # LLM provider
+    OPENAI_API_KEY=sk-...
+
+    # Database (aegra dev manages this automatically)
+    POSTGRES_USER=aegra
+    POSTGRES_PASSWORD=aegra
+    POSTGRES_DB=aegra
+    ```
+
+    If you already have a PostgreSQL instance, set `DATABASE_URL` directly:
+
+    ```bash
+    DATABASE_URL=postgresql://user:pass@host:5432/aegra
+    ```
+  </Step>
+
+  <Step title="Start the server">
+    ```bash
+    uv sync
+    uv run aegra dev
+    ```
+
+    This starts PostgreSQL in Docker, runs migrations, and launches the server with hot reload at `http://localhost:2026`.
+  </Step>
+
+  <Step title="Update your client URL">
+    Change the client URL in your application code:
+
+    ```python
+    from langgraph_sdk import get_client
+
+    # Before
+    # client = get_client(url="https://your-deployment.langsmith.com")
+
+    # After
+    client = get_client(url="http://localhost:2026")
+    ```
+
+    Everything else — thread creation, runs, streaming, state inspection — works the same.
+  </Step>
+</Steps>
+
+## Migrate authentication
+
+LangSmith Deployments configures auth through a dashboard. Aegra uses a Python handler instead.
+
+Create an auth file and reference it in `aegra.json`:
+
+```python
+from langgraph_sdk import Auth
+
+auth = Auth()
+
+@auth.authenticate
+async def authenticate(headers: dict) -> dict:
+    token = headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        raise Exception("Authentication required")
+
+    # Replace with your JWT verification logic
+    payload = verify_jwt(token)
+    return {
+        "identity": payload["sub"],
+        "display_name": payload.get("name", ""),
+        "is_authenticated": True,
+    }
+```
+
+```json
+{
+  "graphs": { "agent": "./graphs/agent.py:graph" },
+  "auth": { "path": "./my_auth.py:auth" }
+}
+```
+
+See the [authentication guide](/guides/authentication) for JWT, OAuth, and Firebase examples.
+
+## Migrate tracing
+
+LangSmith Deployments sends traces to LangSmith automatically. With Aegra, you configure tracing via environment variables and can send to any OTLP-compatible backend.
+
+To send traces to Langfuse:
+
+```bash
+OTEL_TARGETS="LANGFUSE"
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+```
+
+You can fan out to multiple backends simultaneously:
+
+```bash
+OTEL_TARGETS="LANGFUSE,PHOENIX"
+```
+
+See the [observability guide](/guides/observability) for all supported backends and configuration options.
+
+## Features not yet available
+
+A few features from LangSmith Deployments are not yet supported in Aegra. See the [feature support](/feature-support) page for the full matrix. Key gaps:
+
+- **Cron / scheduled jobs** — Coming soon.
+- **RemoteGraph** — Not yet planned.
+
+## Get help
+
+- **Discord** — [Join the community](https://discord.com/invite/D5M3ZPS25e) for questions and discussion.
+- **GitHub** — [Open an issue](https://github.com/aegra/aegra/issues) for bugs or feature requests.

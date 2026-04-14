@@ -1,32 +1,61 @@
-# Docker Compose - PostgreSQL + Redis + API
-# aegra dev  -> docker compose up postgres -d  (database only, in-memory broker)
-# aegra up   -> docker compose up --build      (full stack, Redis broker)
-
 services:
+  # PostgreSQL database for LangGraph and metadata
   postgres:
     image: pgvector/pgvector:pg18
-    container_name: backend-postgres
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-backend}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-backend_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-backend}
+    env_file:
+      - .env
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-backend}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: backend-redis
+  # Aegra Server
+  aegra:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${PORT:-2026}:${PORT:-2026}"
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - PYTHONPATH=/app/src
+      - REDIS_BROKER_ENABLED=true
+      - REDIS_URL=redis://redis:6379/0
+      - WORKER_COUNT=3
+      - N_JOBS_PER_WORKER=10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:$${PORT:-2026}/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./aegra.json:/app/aegra.json:ro
+      - ./examples:/app/examples:ro
+      - ./libs/aegra-api/src:/app/src:ro  # Mount full src for PYTHONPATH to work
+      - ./libs/aegra-api/alembic:/app/alembic:ro # for migrations
+    command: ["uvicorn", "aegra_api.main:app", "--host", "0.0.0.0", "--port", "${PORT:-2026}", "--reload"]
+
+  # Redis - enables multi-instance SSE streaming with pub/sub + replay
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -34,39 +63,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  backend:
-    build: .
-    container_name: backend-api
-    restart: unless-stopped
-    ports:
-      - "${PORT:-2026}:${PORT:-2026}"
-    env_file:
-      - .env
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-backend}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-backend_secret}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=${POSTGRES_DB:-backend}
-      - AEGRA_CONFIG=aegra.json
-      - AUTH_TYPE=${AUTH_TYPE:-noop}
-      - PORT=${PORT:-2026}
-      - REDIS_BROKER_ENABLED=true
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:${PORT:-2026}/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    volumes:
-      - ./src:/app/src:ro
-      - ./aegra.json:/app/aegra.json:ro
 
 volumes:
   postgres_data:

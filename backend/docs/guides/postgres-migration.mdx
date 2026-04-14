@@ -1,0 +1,89 @@
+---
+title: "PostgreSQL 18 migration"
+description: "Migrate your local PostgreSQL data from version 15 to 18."
+---
+
+<Note>
+  **New users** don't need this guide. Run `docker compose up` and you're ready.
+</Note>
+
+The database was upgraded from PostgreSQL 15 to 18. This is a breaking change for existing local environments — the internal file format changed, so the old Docker volume is incompatible.
+
+If you see `FATAL: database files are incompatible with server`, follow the steps below.
+
+## Migration steps
+
+<Steps>
+  <Step title="Back up your data">
+    While your v15 container is still running:
+
+    ```bash
+    docker compose exec -T postgres pg_dumpall -c -U user > dump.sql
+    ```
+  </Step>
+
+  <Step title="Remove the old volume">
+    The internal file structure changed in v18. You must delete the old volume:
+
+    ```bash
+    # Option A: Delete all volumes (simplest)
+    docker compose down -v
+
+    # Option B: Delete only the Postgres volume
+    docker volume rm aegra_postgres_data
+    ```
+
+    <Warning>
+      Make sure you have the dump from step 1 before proceeding.
+    </Warning>
+  </Step>
+
+  <Step title="Start the database">
+    Pull the latest changes and start only the database:
+
+    ```bash
+    git pull origin main
+    docker compose up -d postgres
+    ```
+  </Step>
+
+  <Step title="Restore your data">
+    Wait a few seconds for the database to initialize, then restore:
+
+    ```bash
+    cat dump.sql | docker compose exec -T postgres psql -U user -d postgres
+    ```
+  </Step>
+
+  <Step title="Start the application">
+    ```bash
+    docker compose down
+    docker compose up -d
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<Accordion title="Container fails with 'database files are incompatible'">
+  You didn't remove the old volume. Run:
+
+  ```bash
+  docker compose down -v
+  docker compose up -d
+  ```
+
+  This removes all data and starts fresh. If you need to preserve data, follow the full migration steps above.
+</Accordion>
+
+<Accordion title="Restore fails with 'relation already exists'">
+  The application started before the restore and created empty tables. Remove the volume and try again from step 2:
+
+  ```bash
+  docker compose down -v
+  docker compose up -d postgres
+  cat dump.sql | docker compose exec -T postgres psql -U user -d postgres
+  docker compose down
+  docker compose up -d
+  ```
+</Accordion>

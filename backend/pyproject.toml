@@ -1,15 +1,68 @@
+# Root pyproject.toml - Workspace configuration + dev tools
+# The actual packages are in libs/aegra-api and libs/aegra-cli
+
 [project]
-name = "agent-chat-backend"
-version = "0.1.0"
+name = "aegra-workspace"
+version = "0.0.0"
 requires-python = ">=3.12"
 dependencies = [
-    "deepagents>=0.1.0",
-    "aegra-api>=0.1.0",
-    "langgraph>=0.2.0",
-    "langchain-openai>=0.1.0",
-    "langchain-anthropic>=0.1.0",
-    "python-dotenv>=1.0.0",
-    "psycopg2-binary>=2.9.0",
-    "asyncpg>=0.29.0",
-    "ddgs>=3.0.0",
+    "agents",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["libs/*", "../agents"]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.1",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "UP",    # pyupgrade
+    "ARG",   # flake8-unused-arguments
+    "SIM",   # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults
+    "B904",   # Within an except clause, raise exceptions with `raise ... from err`
+    "ARG001", # Unused function argument
+    "ARG002", # Unused method argument
+    "ARG005", # Unused lambda argument
+    "SIM108", # Use ternary operator (less readable in many cases)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aegra_api", "aegra_cli"]
+
+# Note: pytest config is in each package's pyproject.toml
+# Run tests from: libs/aegra-api or libs/aegra-cli
+
+# ty replaces mypy for type checking. It uses its own rule system rather than
+# mypy-style strictness flags. Severity and per-rule overrides go in
+# [tool.ty.rules]; see https://docs.astral.sh/ty/reference/rules/ for details.
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = [
+    "B101",  # assert statements
+    "B404",  # import subprocess (needed for CLI)
+    "B603",  # subprocess without shell=True (needed for CLI)
+    "B607",  # partial executable path (needed for CLI to run docker, systemctl, etc.)
 ]

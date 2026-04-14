@@ -1,0 +1,124 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Aegra",
+  "logo": {
+    "light": "/images/logo-light.svg",
+    "dark": "/images/logo-dark.svg"
+  },
+  "favicon": "/images/favicon.svg",
+  "colors": {
+    "primary": "#f97316",
+    "light": "#fb923c",
+    "dark": "#ea580c"
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "topbarLinks": [
+    {
+      "name": "Discord",
+      "url": "https://discord.com/invite/D5M3ZPS25e"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "GitHub",
+    "url": "https://github.com/aegra/aegra"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting started",
+            "icon": "rocket",
+            "pages": [
+              "introduction",
+              "why-aegra",
+              "quickstart",
+              "installation",
+              "getting-started",
+              "migration",
+              "feature-support"
+            ]
+          },
+          {
+            "group": "Core concepts",
+            "icon": "book",
+            "pages": [
+              "guides/assistants",
+              "guides/threads-and-state",
+              "guides/streaming",
+              "guides/human-in-the-loop"
+            ]
+          },
+          {
+            "group": "Data & storage",
+            "icon": "database",
+            "pages": [
+              "guides/store",
+              "guides/semantic-store",
+              "guides/subgraphs"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "icon": "gear",
+            "pages": [
+              "guides/authentication",
+              "guides/custom-routes",
+              "guides/dependencies",
+              "guides/observability",
+              "guides/deployment",
+              "guides/worker-architecture"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "icon": "code-pull-request",
+            "pages": [
+              "guides/contributing",
+              "guides/postgres-migration"
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "file-lines",
+            "pages": [
+              "reference/configuration",
+              "reference/cli",
+              "reference/environment-variables"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "openapi.json"
+      }
+    ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/aegra/aegra",
+    "discord": "https://discord.com/invite/D5M3ZPS25e"
+  },
+  "feedback": {
+    "thumbsRating": true,
+    "suggestEdit": true
+  },
+  "search": {
+    "prompt": "Search Aegra docs..."
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
+  }
+}

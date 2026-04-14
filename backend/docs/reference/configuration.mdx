@@ -1,0 +1,330 @@
+---
+title: "Configuration"
+description: "Complete reference for the aegra.json configuration file."
+---
+
+Aegra uses a JSON configuration file (`aegra.json`) to define graphs, authentication, HTTP settings, and the semantic store.
+
+## Config file resolution
+
+Aegra resolves configuration files in this order:
+
+1. **`AEGRA_CONFIG` environment variable** — absolute or relative path
+2. **`aegra.json`** in the current working directory
+3. **`langgraph.json`** in the current working directory (compatibility fallback)
+
+```bash
+# Use a custom config file
+AEGRA_CONFIG=production.json aegra dev
+
+# Use default aegra.json
+aegra dev
+```
+
+## Complete example
+
+```json
+{
+  "dependencies": ["./shared"],
+  "graphs": {
+    "agent": "./src/react_agent/graph.py:graph",
+    "agent_hitl": "./src/react_agent_hitl/graph.py:graph"
+  },
+  "auth": {
+    "path": "./my_auth.py:auth",
+    "disable_studio_auth": false
+  },
+  "http": {
+    "app": "./custom_routes.py:app",
+    "enable_custom_route_auth": false,
+    "cors": {
+      "allow_origins": ["https://example.com"],
+      "allow_credentials": true
+    }
+  },
+  "store": {
+    "index": {
+      "dims": 1536,
+      "embed": "openai:text-embedding-3-small",
+      "fields": ["$"]
+    }
+  }
+}
+```
+
+## `dependencies`
+
+Add shared utility module paths to `sys.path` before graphs are loaded.
+
+```json
+{
+  "dependencies": ["./shared", "./libs/common"]
+}
+```
+
+| Type | Description |
+|------|-------------|
+| `list[str]` | List of directory paths to add to `sys.path` |
+
+- Relative paths are resolved from the config file's directory
+- Paths are added in order (first has highest import priority)
+- Non-existent paths generate a warning but don't prevent startup
+
+See [dependencies guide](/guides/dependencies) for details.
+
+## `graphs`
+
+Define your LangGraph agents.
+
+```json
+{
+  "graphs": {
+    "agent": "./src/react_agent/graph.py:graph",
+    "custom_agent": "./src/custom/graph.py:my_graph"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Key | `string` | Graph ID (used in API calls to identify the graph) |
+| Value | `string` | Import path in format `./path/to/file.py:variable` |
+
+The variable can be:
+
+- **A compiled graph** — result of `builder.compile()` (static, cached once at startup)
+- **A 0-arg callable** — called once at startup to produce the graph (e.g., for MCP adapter setup)
+- **A factory function** — called per-request with `config` and/or `ServerRuntime` to produce a graph customized for the current user or request context
+
+### Static graphs
+
+```python
+builder = StateGraph(State)
+# ... define nodes and edges
+graph = builder.compile()  # Export as 'graph'
+```
+
+### Factory graphs
+
+Export a callable that accepts `config` (a `RunnableConfig` dict), `runtime` (a `ServerRuntime`), or both:
+
+```python
+from langgraph_sdk.runtime import ServerRuntime
+
+def graph(runtime: ServerRuntime):
+    """Per-request factory — called with user context."""
+    user = runtime.user
+    store = runtime.store
+    # Customize graph based on user/context
+    builder = StateGraph(State)
+    # ...
+    return builder.compile()
+```
+
+Supported factory signatures:
+- `def graph()` — 0-arg, called once at startup
+- `def graph(config: dict)` — receives the `RunnableConfig` per-request
+- `def graph(runtime: ServerRuntime)` — receives runtime with user, store, and access context
+- `def graph(config: dict, runtime: ServerRuntime)` — receives both (any parameter order)
+
+Async factories and factories returning async context managers are also supported.
+
+#### Typed context with `Runtime[T]` (node-level)
+
+When a run is created with a `context` dict, Aegra passes it to `graph.astream(context=...)`. LangGraph core coerces it to a typed object and injects it into nodes via `Runtime[T]`. This works for **both static and factory graphs**:
+
+```python
+from dataclasses import dataclass
+from langgraph.graph import StateGraph
+from langgraph.runtime import Runtime
+
+@dataclass
+class MyContext:
+    model_name: str = "openai/gpt-4o-mini"
+    temperature: float = 0.7
+
+class State(TypedDict):
+    messages: list
+
+async def call_model(state: State, runtime: Runtime[MyContext]):
+    """Node receives typed context via Runtime injection."""
+    model = runtime.context.model_name      # str, typed
+    temp = runtime.context.temperature      # float, typed
+    ...
+
+builder = StateGraph(State, context_schema=MyContext)
+builder.add_node("call_model", call_model)
+...
+graph = builder.compile()
+```
+
+Pydantic `BaseModel` and `dataclass` types are both supported. Declare `context_schema=` on `StateGraph` and add a `runtime: Runtime[T]` parameter to any node that needs it.
+
+#### Factory-level context with `ServerRuntime[T]`
+
+For factory graphs, `ServerRuntime[T]` provides typed context at **graph-build time** — before execution starts. Use this for structural decisions that change the graph topology (adding/removing nodes, selecting tools, managing resource lifecycle):
+
+```python
+from langgraph_sdk.runtime import ServerRuntime
+
+@asynccontextmanager
+async def graph(runtime: ServerRuntime[MyContext]):
+    ert = runtime.execution_runtime
+    ctx = ert.context if ert else MyContext()
+
+    # Structural decision — changes graph topology
+    tools = [search_tool] if ctx.enable_search else []
+    compiled = build_graph(tools)
+    yield compiled
+```
+
+Use `runtime.execution_runtime` to check whether the factory is being called for actual execution (returns the execution runtime with `.context`) or for introspection like schema extraction (returns `None`).
+
+**When to use which:**
+
+| Need | Use | Works with |
+|------|-----|------------|
+| Read context in node functions | `Runtime[T]` on node parameter | Static + factory graphs |
+| Change graph structure per request | `ServerRuntime[T]` in factory | Factory graphs only |
+| Manage resource lifecycle (MCP, DB) | `ServerRuntime[T]` + async context manager | Factory graphs only |
+| Filter tools by user permissions | `ServerRuntime` (`.user`) in factory | Factory graphs only |
+
+For a complete example combining both layers, see [`examples/factory/`](https://github.com/aegra/aegra/tree/main/examples/factory).
+
+## `auth`
+
+Configure authentication and authorization.
+
+```json
+{
+  "auth": {
+    "path": "./my_auth.py:auth",
+    "disable_studio_auth": false
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `path` | `string` | — | Import path to your auth handler (`./file.py:variable`) |
+| `disable_studio_auth` | `bool` | `false` | Disable auth for LangGraph Studio connections |
+
+The `path` supports multiple formats:
+- `./auth.py:auth` — Load from a file relative to the config
+- `./src/auth/jwt.py:auth` — Nested path
+- `mypackage.auth:auth` — Load from an installed package
+
+If `auth` is not configured, Aegra runs in no-auth mode where all requests are allowed.
+
+See [authentication guide](/guides/authentication) for details.
+
+## `http`
+
+Configure custom routes and CORS.
+
+```json
+{
+  "http": {
+    "app": "./custom_routes.py:app",
+    "enable_custom_route_auth": false,
+    "cors": {
+      "allow_origins": ["https://example.com"],
+      "allow_credentials": true
+    }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `app` | `string` | `None` | Import path to custom FastAPI app |
+| `enable_custom_route_auth` | `bool` | `false` | Apply Aegra auth to all custom routes |
+| `cors.allow_origins` | `list[str]` | `["*"]` | Allowed CORS origins |
+| `cors.allow_credentials` | `bool` | `false` when origins is `["*"]`, `true` otherwise | Allow credentials in CORS requests |
+
+See [custom routes guide](/guides/custom-routes) for details.
+
+## `store`
+
+Configure semantic store with vector embeddings.
+
+```json
+{
+  "store": {
+    "index": {
+      "dims": 1536,
+      "embed": "openai:text-embedding-3-small",
+      "fields": ["$"]
+    }
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `index.dims` | `integer` | Yes | Embedding vector dimensions (must match your model) |
+| `index.embed` | `string` | Yes | Embedding model in format `provider:model-id` |
+| `index.fields` | `list[str]` | No | JSON fields to embed (default: `["$"]` for entire document) |
+
+If `store` is not configured, Aegra operates in basic key-value mode.
+
+See [semantic store guide](/guides/semantic-store) for details.
+
+## Common configurations
+
+### Minimal
+
+```json
+{
+  "graphs": {
+    "agent": "./src/agent/graph.py:graph"
+  }
+}
+```
+
+### With authentication
+
+```json
+{
+  "graphs": {
+    "agent": "./src/agent/graph.py:graph"
+  },
+  "auth": {
+    "path": "./my_auth.py:auth"
+  }
+}
+```
+
+### With custom routes
+
+```json
+{
+  "graphs": {
+    "agent": "./src/agent/graph.py:graph"
+  },
+  "http": {
+    "app": "./custom_routes.py:app"
+  }
+}
+```
+
+### Production
+
+```json
+{
+  "graphs": {
+    "agent": "./src/agent/graph.py:graph"
+  },
+  "auth": {
+    "path": "./auth/production_auth.py:auth"
+  },
+  "http": {
+    "app": "./custom_routes.py:app",
+    "enable_custom_route_auth": true,
+    "cors": {
+      "allow_origins": ["https://myapp.com"],
+      "allow_credentials": true
+    }
+  }
+}
+```

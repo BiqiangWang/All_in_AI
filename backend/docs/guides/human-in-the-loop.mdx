@@ -1,0 +1,228 @@
+---
+title: "Human-in-the-loop"
+description: "Add approval gates and user intervention points to your agents."
+---
+
+Human-in-the-loop (HITL) lets you pause agent execution at specific points to get user input before continuing. This is essential for tool approval, content review, or any workflow that needs human judgment.
+
+## How it works
+
+1. Your graph calls `interrupt()` at a decision point
+2. The run pauses and the thread status becomes `"interrupted"`
+3. Your application retrieves the interrupt payload (what the agent wants to do)
+4. The user decides what to do (approve, edit, reject, respond)
+5. You resume the run with a `command` that tells the agent how to proceed
+
+## Quick example
+
+### Define a graph with an approval gate
+
+```python
+from langgraph.graph import StateGraph
+from langgraph.types import Command, interrupt
+
+
+def human_approval(state):
+    """Pause for human approval before executing tools."""
+    tool_calls = state["messages"][-1].tool_calls
+
+    # Send interrupt to client with action details
+    response = interrupt({
+        "action_request": {
+            "action": tool_calls[0]["name"],
+            "args": tool_calls[0]["args"],
+        },
+        "config": {
+            "allow_accept": True,
+            "allow_edit": True,
+            "allow_respond": True,
+            "allow_ignore": True,
+        },
+    })
+
+    # Process the human response
+    human_response = response[0]
+
+    if human_response["type"] == "accept":
+        return Command(goto="tools")
+    elif human_response["type"] == "edit":
+        # Update tool args with human edits
+        state["messages"][-1].tool_calls[0]["args"] = human_response["args"]
+        return Command(goto="tools")
+    elif human_response["type"] == "response":
+        # Human provided a direct response instead of using the tool
+        return Command(
+            goto="agent",
+            update={"messages": [{"type": "human", "content": human_response["args"]}]},
+        )
+    elif human_response["type"] == "ignore":
+        return Command(goto="__end__")
+```
+
+### Wire it into the graph
+
+```python
+builder = StateGraph(State)
+builder.add_node("agent", call_model)
+builder.add_node("human_approval", human_approval)
+builder.add_node("tools", tool_node)
+
+builder.set_entry_point("agent")
+builder.add_conditional_edges("agent", should_use_tools, {
+    "tools": "human_approval",  # Route through approval instead of directly to tools
+    "__end__": "__end__",
+})
+builder.add_edge("tools", "agent")
+
+graph = builder.compile()
+```
+
+### Register in aegra.json
+
+```json
+{
+  "graphs": {
+    "agent_hitl": "./src/my_agent/graph.py:graph"
+  }
+}
+```
+
+## Client-side flow
+
+### 1. Start a run that triggers an interrupt
+
+```python
+import asyncio
+from langgraph_sdk import get_client
+
+
+async def main():
+    client = get_client(url="http://localhost:2026")
+
+    thread = await client.threads.create()
+
+    # This will pause when the agent tries to use a tool
+    async for chunk in client.runs.stream(
+        thread_id=thread["thread_id"],
+        assistant_id="agent_hitl",
+        input={"messages": [{"type": "human", "content": "Search for AI news"}]},
+    ):
+        print(chunk)
+
+    # Check thread status
+    thread_state = await client.threads.get_state(thread["thread_id"])
+    print(f"Status: {thread_state.get('status', 'unknown')}")
+    print(f"Interrupts: {thread_state['interrupts']}")
+
+
+asyncio.run(main())
+```
+
+### 2. Resume with approval
+
+```python
+async def approve():
+    client = get_client(url="http://localhost:2026")
+
+    thread_id = "your-thread-id"
+
+    # Resume with approval
+    async for chunk in client.runs.stream(
+        thread_id=thread_id,
+        assistant_id="agent_hitl",
+        command={"resume": [{"type": "accept", "args": None}]},
+    ):
+        print(chunk)
+
+
+asyncio.run(approve())
+```
+
+### 3. Resume with edits
+
+```python
+# Edit the tool arguments before executing
+async for chunk in client.runs.stream(
+    thread_id=thread_id,
+    assistant_id="agent_hitl",
+    command={"resume": [{"type": "edit", "args": {"query": "AI news 2026"}}]},
+):
+    print(chunk)
+```
+
+### 4. Respond directly
+
+```python
+# Skip the tool entirely and provide a human response
+async for chunk in client.runs.stream(
+    thread_id=thread_id,
+    assistant_id="agent_hitl",
+    command={"resume": [{"type": "response", "args": "I already know the answer..."}]},
+):
+    print(chunk)
+```
+
+### 5. Ignore the tool call
+
+```python
+# Skip the tool and end the turn
+async for chunk in client.runs.stream(
+    thread_id=thread_id,
+    assistant_id="agent_hitl",
+    command={"resume": [{"type": "ignore", "args": None}]},
+):
+    print(chunk)
+```
+
+## Interrupt before/after nodes
+
+You can also set interrupt points without modifying the graph code, using the `interrupt_before` and `interrupt_after` parameters on the run:
+
+```python
+# Pause before the "tools" node executes
+async for chunk in client.runs.stream(
+    thread_id=thread_id,
+    assistant_id="agent",
+    input={"messages": [{"type": "human", "content": "Search for AI"}]},
+    interrupt_before=["tools"],
+):
+    print(chunk)
+```
+
+Use `"*"` to interrupt before/after every node:
+
+```python
+interrupt_before="*"  # Pause before every node
+interrupt_after="*"   # Pause after every node
+```
+
+## Checking interrupt status
+
+```python
+# Get thread state to see interrupts
+state = await client.threads.get_state(thread_id)
+
+if state["interrupts"]:
+    for interrupt_data in state["interrupts"]:
+        print(f"Interrupt: {interrupt_data}")
+```
+
+## Response types
+
+| Type | Description | `args` |
+|------|-------------|--------|
+| `accept` | Approve the action as-is | `None` |
+| `edit` | Approve with modified arguments | Modified args dict |
+| `response` | Skip the action and provide a direct response | Response string |
+| `ignore` | Skip the action entirely | `None` |
+
+## Important notes
+
+<Note>
+  When resuming an interrupted run, use `command` instead of `input`. The `input` and `command` fields are mutually exclusive — you can't send both.
+</Note>
+
+- Interrupts work transparently across subgraph boundaries
+- The thread status changes to `"interrupted"` when paused and `"idle"` when completed
+- You can inspect the interrupt payload in thread state to show the user what the agent wants to do
+- Multiple sequential interrupts are supported in a single run

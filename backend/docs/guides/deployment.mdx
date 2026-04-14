@@ -1,0 +1,222 @@
+---
+title: "Deployment"
+description: "Deploy Aegra to Docker, PaaS platforms, or Kubernetes."
+---
+
+Aegra provides three CLI commands for different deployment scenarios:
+
+| Command | Starts PostgreSQL? | Starts Redis? | Starts app? | Best for |
+|---------|-------------------|--------------|-------------|----------|
+| `aegra dev` | Yes (Docker) | No | Yes (host, hot reload) | Local development |
+| `aegra up` | Yes (Docker) | Yes (Docker) | Yes (Docker) | Self-hosted production |
+| `aegra serve` | No | No | Yes (host) | PaaS, containers, bare metal |
+
+## Local development
+
+```bash
+aegra dev
+```
+
+This starts a PostgreSQL container via Docker Compose and runs the app on your host with hot reload. No Redis is required -- runs execute as in-process asyncio tasks.
+
+What it does:
+1. Finds or generates `docker-compose.yml` with PostgreSQL
+2. Starts the PostgreSQL container
+3. Loads your `.env` file (with `REDIS_BROKER_ENABLED=false` by default)
+4. Runs uvicorn with `--reload` for hot reloading
+5. Applies database migrations automatically on startup
+
+<Accordion title="aegra dev options">
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--host` | `127.0.0.1` | Host to bind to |
+| `--port` | `2026` | Port to bind to |
+| `--config` / `-c` | Auto-detected | Path to `aegra.json` |
+| `--env-file` / `-e` | `.env` | Path to `.env` file |
+| `--file` / `-f` | Auto-detected | Path to `docker-compose.yml` |
+| `--no-db-check` | — | Skip database readiness check |
+</Accordion>
+
+## Self-hosted with Docker
+
+```bash
+aegra up
+```
+
+Starts the entire stack (PostgreSQL + Redis + app) in Docker containers. This is the recommended production deployment for your own infrastructure.
+
+What it does:
+1. Finds or generates `docker-compose.yml` with PostgreSQL, Redis, and app service
+2. Builds the Docker image from your `Dockerfile`
+3. Starts all containers
+4. The app container runs `aegra serve` internally with `REDIS_BROKER_ENABLED=true`
+5. Migrations apply automatically on startup
+6. Workers start automatically and begin processing runs from the Redis job queue — see the [worker architecture guide](/guides/worker-architecture) for details on job dispatch, concurrency, and crash recovery
+
+The generated `docker-compose.yml` includes:
+- PostgreSQL with pgvector
+- Redis for job dispatch, SSE pub/sub, and crash recovery
+- Your app container built from `Dockerfile`
+- Health checks on both PostgreSQL and the API
+- `restart: unless-stopped` on all services — containers automatically restart on crashes or failed health checks, but respect manual `docker compose stop`
+- Volume mounts for your source code and config
+
+To stop:
+
+```bash
+aegra down            # Stop containers
+aegra down --volumes  # Stop and remove data volumes
+```
+
+<Accordion title="aegra up options">
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--build` / `--no-build` | Build on | Build images before starting |
+| `--file` / `-f` | Auto-detected | Path to compose file |
+| `SERVICE...` | All | Specific services to start |
+</Accordion>
+
+## PaaS deployment
+
+For platforms like Railway, Render, or Fly.io — use `aegra serve`:
+
+```bash
+aegra serve
+```
+
+This runs uvicorn directly without starting PostgreSQL. You provide a running database instance via environment variables. Redis is only required when `REDIS_BROKER_ENABLED=true` (recommended for multi-instance production deployments). Without Redis, runs execute as in-process asyncio tasks — suitable for single-instance deployments.
+
+<Steps>
+  <Step title="Create a PostgreSQL addon on your platform">
+    Most PaaS platforms offer managed PostgreSQL. Create one and get the connection URL.
+  </Step>
+  <Step title="Create a Redis addon">
+    For production workloads, add a managed Redis instance. This enables the worker job queue, cross-instance SSE streaming, and crash recovery. Without Redis (`REDIS_BROKER_ENABLED=false`), runs execute as in-process asyncio tasks (suitable for single-instance deployments).
+  </Step>
+  <Step title="Set environment variables">
+    ```bash
+    DATABASE_URL=postgresql://user:password@host:5432/mydb
+    REDIS_BROKER_ENABLED=true
+    REDIS_URL=redis://your-redis-host:6379/0
+    OPENAI_API_KEY=sk-...
+    AUTH_TYPE=noop  # or custom
+    ```
+  </Step>
+  <Step title="Set the start command">
+    ```text
+    aegra serve --host 0.0.0.0 --port $PORT
+    ```
+
+    Or in your `Dockerfile`:
+    ```dockerfile
+    CMD ["aegra", "serve"]
+    ```
+  </Step>
+</Steps>
+
+<Accordion title="aegra serve options">
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--host` | `0.0.0.0` | Host to bind to |
+| `--port` | `2026` | Port to bind to |
+| `--config` / `-c` | Auto-detected | Path to `aegra.json` |
+</Accordion>
+
+## Kubernetes
+
+Use `aegra serve` as the container command in your pod spec:
+
+```yaml
+containers:
+  - name: aegra
+    image: your-registry/your-agent:latest
+    command: ["aegra", "serve"]
+    env:
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: aegra-secrets
+            key: database-url
+      - name: REDIS_BROKER_ENABLED
+        value: "true"
+      - name: REDIS_URL
+        valueFrom:
+          secretKeyRef:
+            name: aegra-secrets
+            key: redis-url
+    ports:
+      - containerPort: 2026
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 2026
+    livenessProbe:
+      httpGet:
+        path: /live
+        port: 2026
+```
+
+PostgreSQL should be a managed service (CloudSQL, RDS, etc.) or a StatefulSet with persistent volumes. Redis should be a managed service (ElastiCache, Memorystore, etc.) or a separate Deployment.
+
+## Database configuration
+
+Two ways to configure the database connection:
+
+<Tabs>
+  <Tab title="Connection string (recommended for production)">
+    ```bash
+    DATABASE_URL=postgresql://user:password@host:5432/mydb?sslmode=require
+    ```
+
+    The URL is used directly by both SQLAlchemy and LangGraph with the appropriate driver prefix applied automatically. Query parameters (like `?sslmode=require`) are preserved.
+  </Tab>
+  <Tab title="Individual fields">
+    Used when `DATABASE_URL` is not set:
+
+    ```bash
+    POSTGRES_DB=mydb
+    POSTGRES_HOST=localhost
+    POSTGRES_PASSWORD=secret
+    POSTGRES_PORT=5432
+    POSTGRES_USER=myuser
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  `DATABASE_URL` takes precedence. When set, individual `POSTGRES_*` variables are ignored.
+</Note>
+
+## Migrations
+
+Migrations run automatically on startup for all deployment methods. You do not need to run them manually.
+
+## Health checks
+
+Aegra provides health check endpoints for load balancers, Docker, and Kubernetes probes:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Overall health status |
+| `GET /ready` | Readiness check |
+| `GET /live` | Liveness check |
+| `GET /info` | Server info |
+
+The generated `docker-compose.yml` uses `/health` to monitor the API container. If the server hangs or becomes unresponsive, Docker marks it unhealthy after 3 consecutive failures (every 30 seconds). Combined with `restart: unless-stopped`, unhealthy containers are automatically restarted.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused on startup">
+    PostgreSQL is not reachable. If using `aegra dev` or `aegra up`, make sure Docker is running. If using `aegra serve`, verify your `DATABASE_URL` or `POSTGRES_*` variables in `.env`.
+  </Accordion>
+  <Accordion title="Password authentication failed">
+    Wrong database credentials. Check that `POSTGRES_USER` and `POSTGRES_PASSWORD` in your `.env` match what PostgreSQL was initialized with.
+  </Accordion>
+  <Accordion title="Relation does not exist">
+    Migrations haven't been applied. This usually means the server couldn't connect to PostgreSQL during startup. Check the logs for connection errors, fix the connection, and restart.
+  </Accordion>
+  <Accordion title="Migrations hang on startup">
+    Check if another process holds a lock on the database, if the database is reachable but slow, or check server logs for specific migration errors.
+  </Accordion>
+</AccordionGroup>

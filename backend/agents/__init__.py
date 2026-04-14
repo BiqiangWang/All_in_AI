@@ -1,1 +1,1 @@
-"""Agent definitions for Aegra."""
+"""All-in-AI agent configuration for Aegra."""

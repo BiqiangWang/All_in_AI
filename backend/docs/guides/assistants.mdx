@@ -1,0 +1,149 @@
+---
+title: "Assistants"
+description: "Create and manage configured instances of your graphs."
+---
+
+An assistant is a configured instance of a LangGraph graph. While graphs define the agent logic, assistants let you create multiple configurations of the same graph with different names, metadata, and settings.
+
+## Default assistants
+
+When the server starts, Aegra automatically creates a default assistant for each graph defined in `aegra.json`. The default assistant uses the graph ID as its assistant ID, so you can use graph IDs directly in runs without creating assistants manually.
+
+```json
+{
+  "graphs": {
+    "agent": "./src/my_agent/graph.py:graph"
+  }
+}
+```
+
+This automatically creates an assistant with ID `"agent"` that you can use immediately.
+
+## Creating assistants
+
+Create custom assistants with specific configurations:
+
+```python
+import asyncio
+from langgraph_sdk import get_client
+
+
+async def main():
+    client = get_client(url="http://localhost:2026")
+
+    # Create an assistant from your graph
+    assistant = await client.assistants.create(
+        graph_id="agent",
+        name="Customer Support Agent",
+        description="Handles customer inquiries with web search",
+        metadata={"department": "support", "tier": "premium"},
+    )
+    print(f"Assistant ID: {assistant['assistant_id']}")
+
+
+asyncio.run(main())
+```
+
+### Idempotent creation
+
+Use `if_exists` to avoid errors when the assistant already exists:
+
+```python
+assistant = await client.assistants.create(
+    graph_id="agent",
+    name="My Agent",
+    if_exists="do_nothing",  # Returns existing if already created
+)
+```
+
+<Note>
+  The snippets below assume you are inside an `async def` function with an initialized `client` — see the example above.
+</Note>
+
+## Listing and searching
+
+```python
+# List all assistants
+assistants = await client.assistants.search()
+
+# Search by graph ID
+results = await client.assistants.search(graph_id="agent")
+
+# Search by metadata
+results = await client.assistants.search(
+    metadata={"department": "support"},
+)
+
+# Search by name
+results = await client.assistants.search(name="Customer Support")
+```
+
+## Updating assistants
+
+```python
+assistant = await client.assistants.update(
+    assistant_id="your-assistant-id",
+    name="Updated Name",
+    metadata={"department": "engineering"},
+)
+```
+
+## Versioning
+
+Assistants are versioned. Each update creates a new version while preserving the history:
+
+```python
+# List all versions
+versions = await client.assistants.get_versions(assistant_id)
+
+# Set a specific version as the latest
+await client.assistants.set_latest(assistant_id, version=2)
+```
+
+## Graph schemas
+
+Retrieve the input, output, state, and config schemas for an assistant's graph:
+
+```python
+schemas = await client.assistants.get_schemas(assistant_id)
+print(schemas["input_schema"])
+print(schemas["output_schema"])
+print(schemas["state_schema"])
+print(schemas["config_schema"])
+```
+
+## Graph visualization
+
+Get the graph structure for visualization:
+
+```python
+# Basic graph structure (nodes and edges)
+graph = await client.assistants.get_graph(assistant_id)
+
+# Detailed view with xray (expands subgraphs)
+graph = await client.assistants.get_graph(assistant_id, xray=True)
+
+# Control xray depth
+graph = await client.assistants.get_graph(assistant_id, xray=2)
+```
+
+The response includes `nodes` and `edges` that can be rendered by LangGraph Studio or custom visualizers.
+
+## Subgraphs
+
+If your graph uses subgraphs, you can inspect them:
+
+```python
+subgraphs = await client.assistants.get_subgraphs(assistant_id)
+
+# Recursively list all nested subgraphs
+subgraphs = await client.assistants.get_subgraphs(assistant_id, recurse=True)
+```
+
+## Deleting assistants
+
+```python
+await client.assistants.delete(assistant_id)
+```
+
+When authentication is enabled, you can restrict deletion to admin users using authorization handlers. See the [authentication guide](/guides/authentication).

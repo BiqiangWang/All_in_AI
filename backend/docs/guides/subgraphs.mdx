@@ -1,0 +1,129 @@
+---
+title: "Subgraphs"
+description: "Compose agents by nesting graphs within graphs."
+---
+
+Subgraphs let you break complex agent logic into reusable, composable pieces. A parent graph can invoke another compiled graph as a node, and Aegra handles state management, streaming, and interrupts transparently across the boundary.
+
+## Basic composition
+
+Add a compiled graph as a node in another graph:
+
+```python
+from langgraph.graph import StateGraph
+
+# Import your compiled subgraph
+from my_agents.search_agent import graph as search_graph
+
+builder = StateGraph(State)
+builder.add_node("coordinator", coordinator_node)
+builder.add_node("search_agent", search_graph)  # Add graph as a node
+builder.add_node("summarizer", summarize_node)
+
+builder.set_entry_point("coordinator")
+builder.add_edge("coordinator", "search_agent")
+builder.add_edge("search_agent", "summarizer")
+
+graph = builder.compile()
+```
+
+Register the parent graph in `aegra.json`:
+
+```json
+{
+  "graphs": {
+    "orchestrator": "./src/orchestrator/graph.py:graph"
+  }
+}
+```
+
+## Streaming subgraph events
+
+By default, streaming only includes events from the top-level graph. To include subgraph events:
+
+```python
+async for chunk in client.runs.stream(
+    thread_id=thread_id,
+    assistant_id="orchestrator",
+    input={"messages": [{"type": "human", "content": "Research this topic"}]},
+    stream_subgraphs=True,
+):
+    print(chunk)
+```
+
+## Interrupts in subgraphs
+
+Interrupts work transparently across subgraph boundaries. If a subgraph calls `interrupt()`, the parent run pauses and the client receives the interrupt payload. Resuming the run continues execution inside the subgraph.
+
+```python
+from langgraph.types import interrupt
+
+# Subgraph with an interrupt
+def approval_node(state):
+    response = interrupt({"action": "approve_purchase", "amount": state["amount"]})
+    return {"approved": response[0]["type"] == "accept"}
+```
+
+The client-side flow is identical to interrupts in a top-level graph. See the [human-in-the-loop guide](/guides/human-in-the-loop).
+
+## Inspecting subgraphs
+
+Use the assistant API to explore subgraph structure:
+
+```python
+# List subgraphs
+subgraphs = await client.assistants.get_subgraphs(assistant_id)
+
+# Recursive listing
+subgraphs = await client.assistants.get_subgraphs(assistant_id, recurse=True)
+
+# Xray graph visualization (expands subgraph nodes)
+graph = await client.assistants.get_graph(assistant_id, xray=True)
+
+# Control xray depth
+graph = await client.assistants.get_graph(assistant_id, xray=2)
+```
+
+## State and checkpoints
+
+Subgraph state is stored within the parent graph's checkpoints. When you inspect thread state, subgraph checkpoints are available via the `checkpoint_ns` parameter:
+
+```python
+# Get state of a specific subgraph namespace
+state = await client.threads.get_state(
+    thread_id,
+    subgraphs=True,
+)
+```
+
+## Example: orchestrator pattern
+
+A common pattern is a coordinator that delegates to specialized subgraphs:
+
+```python
+from langgraph.graph import StateGraph
+
+from agents.search_agent import graph as search_graph
+from agents.code_agent import graph as code_graph
+
+
+def router(state):
+    """Route to the appropriate specialist agent."""
+    intent = state["intent"]
+    if intent == "search":
+        return "search_agent"
+    elif intent == "code":
+        return "code_agent"
+    return "__end__"
+
+
+builder = StateGraph(State)
+builder.add_node("classify", classify_intent)
+builder.add_node("search_agent", search_graph)
+builder.add_node("code_agent", code_graph)
+
+builder.set_entry_point("classify")
+builder.add_conditional_edges("classify", router)
+
+graph = builder.compile()
+```

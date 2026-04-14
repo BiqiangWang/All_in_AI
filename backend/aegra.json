@@ -1,22 +1,15 @@
 {
-  "$schema": "https://docs.aegra.dev/schema.json",
+  "dependencies": ["./examples"],
   "graphs": {
-    "all-in-ai": "./agents/basic_agent.py:graph"
-  },
-  "auth": {
-    "enabled": false
+    "agent": "./examples/react_agent/graph.py:graph",
+    "agent_hitl": "./examples/react_agent_hitl/graph.py:graph",
+    "subgraph_agent": "./examples/subgraph_agent/graph.py:graph",
+    "subgraph_hitl_agent": "./examples/subgraph_hitl_agent/graph.py:graph",
+    "factory": "./examples/factory/graph.py:graph",
+    "stress_test": "./examples/stress_test/graph.py:graph",
+    "stress_tool_agent": "./examples/stress_tool_agent/graph.py:graph"
   },
   "http": {
-    "port": 2026,
-    "cors": {
-      "allow_origins": ["http://localhost:3000"],
-      "allow_credentials": true
-    }
-  },
-  "store": {
-    "enabled": false
-  },
-  "observability": {
-    "enabled": false
+    "app": "./examples/custom_routes_example.py:app"
   }
 }

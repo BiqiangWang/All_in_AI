@@ -19,32 +19,21 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.backend
+      context: .
+      dockerfile: backend/Dockerfile.backend
     ports:
       - "2026:2026"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/aegra
       REDIS_BROKER_ENABLED: "false"
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    env_file:
+      - backend/.env
+    volumes:
+      - ./backend/agents:/app/agents
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
     command: aegra dev
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.frontend
-    ports:
-      - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:2026
-      NEXT_PUBLIC_ASSISTANT_ID: basic-agent
-    depends_on:
-      - backend
 
 volumes:
   postgres_data:

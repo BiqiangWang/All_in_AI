@@ -7,15 +7,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
+# Install UV
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
-# Copy project files
-COPY . .
+# Copy workspace files
+COPY agents/pyproject.toml agents/uv.lock ./agents/
+COPY backend/pyproject.toml backend/uv.lock ./backend/
 
-# Install dependencies using conda environment as base
-RUN uv sync --all-packages
+# Sync dependencies
+RUN cd agents && uv sync
+RUN cd backend && uv sync
+
+# Copy source
+COPY agents/src ./agents/src
+COPY backend/agents ./backend/agents
+COPY backend/.env ./backend/.env
 
 EXPOSE 2026
 

@@ -1,0 +1,164 @@
+---
+title: "Store"
+description: "Persistent key-value and semantic storage for your agents."
+---
+
+The Store API gives your agents persistent storage for key-value data with optional semantic search. Use it for conversation memory, user preferences, knowledge retrieval, or any data that needs to persist across runs.
+
+## Key-value operations
+
+The store works without any configuration — it's available by default.
+
+### Put an item
+
+```python
+import asyncio
+from langgraph_sdk import get_client
+
+
+async def main():
+    client = get_client(url="http://localhost:2026")
+
+    await client.store.put_item(
+        namespace=["users", "alice", "preferences"],
+        key="theme",
+        value={"color": "dark", "font_size": 14},
+    )
+
+
+asyncio.run(main())
+```
+
+<Note>
+  Values must be JSON objects (dicts). Primitive values like strings or numbers are not accepted.
+  The snippets below assume you are inside an `async def` function with an initialized `client` — see the example above.
+</Note>
+
+### Get an item
+
+```python
+item = await client.store.get_item(
+    namespace=["users", "alice", "preferences"],
+    key="theme",
+)
+print(item["value"])  # {"color": "dark", "font_size": 14}
+```
+
+### Delete an item
+
+```python
+await client.store.delete_item(
+    namespace=["users", "alice", "preferences"],
+    key="theme",
+)
+```
+
+### Search items
+
+```python
+results = await client.store.search_items(
+    namespace_prefix=["users", "alice"],
+    limit=10,
+)
+
+for item in results["items"]:
+    print(f"{item['namespace']}/{item['key']}: {item['value']}")
+```
+
+## Namespaces
+
+Namespaces organize your data hierarchically. They work like directory paths:
+
+```
+["users", "alice", "preferences"]     → User preferences
+["users", "alice", "conversations"]   → Conversation history
+["knowledge", "docs"]                 → Shared knowledge base
+```
+
+### List namespaces
+
+```python
+namespaces = await client.store.list_namespaces(
+    prefix=["users"],
+)
+# Returns: [["users", "alice", "preferences"], ["users", "alice", "conversations"], ...]
+```
+
+### Namespace scoping
+
+All store operations are automatically scoped to the authenticated user's namespace under `["users", <user_id>]`. This means:
+
+- An empty namespace defaults to `["users", <user_id>]`
+- A namespace already under your user prefix (e.g. `["users", "alice", "docs"]`) passes through unchanged
+- Any other namespace (e.g. `["configs"]`) is automatically prefixed to `["users", <user_id>, "configs"]`
+
+This ensures users can never access each other's data, even if they craft a request with another user's namespace.
+
+## Semantic search
+
+When you configure vector embeddings, the store gains semantic search capabilities. Items are automatically embedded when stored and can be queried by meaning.
+
+### Configuration
+
+Add the `store` section to your `aegra.json`:
+
+```json
+{
+  "store": {
+    "index": {
+      "dims": 1536,
+      "embed": "openai:text-embedding-3-small",
+      "fields": ["$"]
+    }
+  }
+}
+```
+
+See the [semantic store guide](/guides/semantic-store) for detailed configuration options and embedding providers.
+
+### Semantic query
+
+```python
+# Store some knowledge
+await client.store.put_item(
+    namespace=["knowledge"],
+    key="python-tips",
+    value={"text": "Use list comprehensions for concise iteration in Python"},
+)
+
+await client.store.put_item(
+    namespace=["knowledge"],
+    key="testing-tips",
+    value={"text": "Always write tests before refactoring existing code"},
+)
+
+# Search by meaning
+results = await client.store.search_items(
+    namespace_prefix=["knowledge"],
+    query="How should I write Python loops?",
+    limit=5,
+)
+# Returns the python-tips item based on semantic similarity
+```
+
+## Using the store in graphs
+
+Your agents can access the store within graph nodes via LangGraph's built-in store injection. Items stored via the API are available to the graph, and vice versa.
+
+```python
+from langgraph.store.base import BaseStore
+
+
+def my_node(state, *, store: BaseStore):
+    """The store is automatically injected by LangGraph."""
+    # Read from the store
+    items = store.search(("users", state["user_id"], "preferences"))
+    prefs = items[0].value if items else {}
+
+    # Write to the store
+    store.put(("users", state["user_id"], "history"), key="last_query", value={"q": state["query"]})
+
+    return {"preferences": prefs}
+```
+
+Add the node to your graph as usual — LangGraph injects the `store` parameter automatically when the graph is compiled with a store backend (which Aegra provides).
