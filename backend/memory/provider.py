@@ -9,7 +9,7 @@ class MemoryProvider(ABC):
     @abstractmethod
     def name(self) -> str:
         """Provider 名称"""
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def is_available(self) -> bool:

@@ -18,9 +18,18 @@ class MemoryManager:
             tools.extend(provider.get_tools())
         return tools
 
-    def handle_tool_call(self, tool_name: str, args: dict[str, Any]) -> str | None:
+    def handle_tool_call(self, tool_name: str, args: dict[str, Any]) -> str:
         """委托给对应 Provider 处理"""
+        matched_provider: MemoryProvider | None = None
         for provider in self._providers:
-            if any(t.get("name") == tool_name for t in provider.get_tools()):
-                return provider.handle_tool_call(tool_name, args)
-        return None
+            for tool in provider.get_tools():
+                if tool.get("name") == tool_name:
+                    if matched_provider is not None:
+                        raise ValueError(
+                            f"Tool '{tool_name}' is registered in multiple providers: "
+                            f"{matched_provider.name}, {provider.name}"
+                        )
+                    matched_provider = provider
+        if matched_provider is None:
+            raise ValueError(f"Tool '{tool_name}' not found in any provider")
+        return matched_provider.handle_tool_call(tool_name, args)
