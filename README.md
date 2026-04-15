@@ -7,24 +7,24 @@
 ### 前置要求
 - Docker Desktop 运行中（PostgreSQL）
 - conda 环境 `langchain-next` 已激活
-- pnpm 或 npm
+- npm
 
 ### 启动后端（Aegra）
 
-```bash
-cd D:/Dev/All_in_AI/agents && conda run -n langchain-next aegra dev
+```powershell
+cd D:/Dev/All_in_AI/agents; conda run -n langchain-next aegra dev --no-db-check
 ```
 
 ### 启动前端
 
-```bash
-cd D:/Dev/All_in_AI/frontend && pnpm dev
+```powershell
+cd D:/Dev/All_in_AI/frontend; npm run dev
 ```
 
 访问 http://localhost:3000
 
 ## 一键启动
 
-```bash
+```powershell
 python D:/Dev/All_in_AI/start_all.py
 ```
