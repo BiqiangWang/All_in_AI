@@ -49,7 +49,7 @@ def main():
     try:
         # 启动后端 (Aegra)
         backend_proc = run_command(
-            "conda run -n langchain-next aegra dev",
+            "conda run -n langchain-next aegra dev --no-db-check",
             cwd=os.path.join(project_root, "agents"),
             name="Aegra"
         )
