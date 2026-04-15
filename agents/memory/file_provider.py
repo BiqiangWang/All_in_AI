@@ -17,14 +17,6 @@ INJECTION_PATTERNS = [
 
 ZERO_WIDTH_CHARS = re.compile(r"[\u200b\u200c\u200d\ufeff]")
 
-MAX_MEMORY_LINES = 200
-
-
-def get_timestamp() -> str:
-    """获取当前时间戳字符串"""
-    from datetime import datetime
-    return datetime.now().strftime("%Y-%m-%d %H:%M")
-
 
 def _scan_content(content: str) -> tuple[bool, str]:
     """扫描内容安全，返回 (is_safe, cleaned_content)"""
@@ -48,12 +40,12 @@ class FileMemoryProvider(MemoryProvider):
         self._memory_dir = Path(memory_dir)
         self._memory_dir.mkdir(exist_ok=True)
         self._memory_file = self._memory_dir / "MEMORY.md"
-        self._profile_file = self._memory_dir / "profile.md"
+        self._profile_file = self._memory_dir / "PROFILE.md"
         self._lock = threading.RLock()
 
         # 确保文件存在
         if not self._memory_file.exists():
-            self._memory_file.write_text("# 记忆历史\n\n", encoding="utf-8")
+            self._memory_file.write_text("# 记忆\n\n", encoding="utf-8")
         if not self._profile_file.exists():
             self._profile_file.write_text("# 用户画像\n\n", encoding="utf-8")
 
@@ -68,7 +60,7 @@ class FileMemoryProvider(MemoryProvider):
         return [
             {
                 "name": "memory",
-                "description": "Store important information in memory. Use append mode for new memories, or update specific sections for user profile changes.",
+                "description": "Read from or update memory store. Use read to retrieve, use update to modify specific sections.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -79,19 +71,19 @@ class FileMemoryProvider(MemoryProvider):
                         },
                         "action": {
                             "type": "string",
-                            "enum": ["read", "append", "update"],
-                            "description": "'read' to retrieve memory, 'append' to add new memory with timestamp, 'update' to modify existing section"
+                            "enum": ["read", "update"],
+                            "description": "'read' to retrieve memory, 'update' to modify existing section"
                         },
                         "content": {
                             "type": "string",
-                            "description": "Natural language content to store. Agent will auto-add timestamp."
+                            "description": "Content to store in the specified section."
                         },
                         "section": {
                             "type": "string",
-                            "description": "For 'user' target with 'update' action only: which profile section to update (e.g., '基础信息', '沟通偏好')."
+                            "description": "Which section to update (e.g., '设定', '已知事实', '基础信息')."
                         }
                     },
-                    "required": ["target", "action", "content"]
+                    "required": ["target", "action", "content", "section"]
                 }
             }
         ]
@@ -105,6 +97,7 @@ class FileMemoryProvider(MemoryProvider):
         target = args.get("target")
         action = args.get("action")
         content = args.get("content", "")
+        section = args.get("section", "")
 
         if action == "read":
             if target == "agent":
@@ -115,14 +108,13 @@ class FileMemoryProvider(MemoryProvider):
                 raise ValueError("Invalid target. Use 'agent' or 'user'.")
             read_content = file_path.read_text(encoding="utf-8")
             return self._build_memory_context_block(read_content)
-        elif action == "append":
-            if target == "agent":
-                return self.append_memory(content)
-            elif target == "user":
-                return self.append_profile("更新记录", content)
         elif action == "update":
-            section = args.get("section", "更新记录")
-            return self.append_profile(section, content)
+            if not section:
+                raise ValueError("section is required for update action")
+            if target == "agent":
+                return self.update_memory(section, content)
+            elif target == "user":
+                return self.update_profile(section, content)
         raise ValueError(f"Unknown action: {action}")
 
     def _build_memory_context_block(self, raw_context: str) -> str:
@@ -185,29 +177,13 @@ class FileMemoryProvider(MemoryProvider):
             self._atomic_write(file_path, "".join(new_lines))
             return f"Updated {file_path.name} lines {start_line}-{end_line}"
 
-    def append_memory(self, content: str) -> str:
-        """追加新记忆，自动添加时间戳"""
-        timestamp = get_timestamp()
-        entry = f"\n## {timestamp}\n{content.strip()}\n"
-        result = self._atomic_append(self._memory_file, entry)
-        # 检查是否需要总结
-        self.summarize_if_needed()
-        return result
+    def update_memory(self, section: str, content: str) -> str:
+        """更新记忆的某个 section，无时间戳"""
+        section_tag = f"## {section}"
+        return self._atomic_replace_section(self._memory_file, section_tag, content)
 
-    def summarize_if_needed(self) -> None:
-        """如果记忆过长，生成总结并截断历史"""
-        with self._lock:
-            current = self._memory_file.read_text(encoding="utf-8")
-            lines = current.splitlines()
-            if len(lines) > MAX_MEMORY_LINES:
-                # 保留最近的一半记忆作为详细历史
-                keep_lines = lines[len(lines)//2:]
-                summary = f"\n## 早期记忆摘要\n[详见历史记录]\n"
-                new_content = summary + "\n".join(keep_lines)
-                self._atomic_write(self._memory_file, new_content)
-
-    def append_profile(self, section: str, content: str) -> str:
-        """更新用户画像的某个 section"""
+    def update_profile(self, section: str, content: str) -> str:
+        """更新用户画像的某个 section，无时间戳"""
         section_tag = f"## {section}"
         return self._atomic_replace_section(self._profile_file, section_tag, content)
 

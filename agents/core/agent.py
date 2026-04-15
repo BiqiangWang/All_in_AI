@@ -61,15 +61,15 @@ def search_web(query: str = Field(description="The search query to look up on th
 
 @tool
 def memory(target: str = Field(description="'agent' for agent's own memory, 'user' for user profile"),
-           action: str = Field(description="'read' to retrieve memory, 'append' to add new memory with timestamp, 'update' to modify existing section"),
-           content: str = Field(default=None, description="Natural language content to store. Agent will auto-add timestamp."),
-           section: str = Field(default=None, description="For 'user' target with 'update' action: which profile section to update.")) -> str:
-    """Store important information in memory. Use append mode for new memories, or update specific sections for user profile changes.
+           action: str = Field(description="'read' to retrieve memory, 'update' to modify existing section"),
+           content: str = Field(default=None, description="Content to store in the specified section."),
+           section: str = Field(default=None, description="Which section to update (e.g., '设定', '已知事实', '基础信息').")) -> str:
+    """Read from or update memory store.
 
     Examples:
     - Read memory: memory(target="agent", action="read")
-    - Append new memory: memory(target="agent", action="append", content="用户喜欢简洁直接的回答")
-    - Update user profile: memory(target="user", action="update", section="基础信息", content="- 称呼：小汪")
+    - Update memory: memory(target="agent", action="update", section="已知事实", content="用户称呼为小汪")
+    - Update profile: memory(target="user", action="update", section="基础信息", content="- 称呼：小汪")
     """
     args = {"target": target, "action": action, "content": content}
     if section:
