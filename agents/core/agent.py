@@ -118,8 +118,10 @@ def create_basic_agent(model_name: str = "MiniMax-M2.7") -> dict[str, Any]:
     memory_instruction = ""
     if memory_context:
         memory_instruction = f"""
-## 记忆上下文
+## 记忆
 {memory_context}
+
+[When user shares information about themselves, use the memory tool to store it naturally.]
 """
 
     # Concise system prompt for conversational agent
