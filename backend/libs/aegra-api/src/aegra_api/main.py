@@ -14,6 +14,7 @@ from fastapi.routing import APIRoute, APIRouter
 from aegra_api import __version__
 from aegra_api.api.assistants import router as assistants_router
 from aegra_api.api.runs import router as runs_router
+from aegra_api.api.skills import router as skills_router
 from aegra_api.api.stateless_runs import router as stateless_runs_router
 from aegra_api.api.store import router as store_router
 from aegra_api.api.threads import router as threads_router
@@ -293,6 +294,7 @@ def _include_core_routers(app: FastAPI) -> None:
     app.include_router(runs_router)
     app.include_router(stateless_runs_router)
     app.include_router(store_router)
+    app.include_router(skills_router)
 
 
 def create_app() -> FastAPI:
