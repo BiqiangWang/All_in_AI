@@ -38,19 +38,12 @@ class FeishuAdapter(BasePlatformAdapter):
             .build()
         self._app_id: str = config.extra.get("app_id", "")
         self._app_secret: str = config.extra.get("app_secret", "")
-        self._domain: str = config.extra.get("domain", "feishu")
+        self._domain: str = config.extra.get("domain", "https://open.feishu.cn")
 
     async def connect(self) -> bool:
         """Connect to Feishu via WebSocket."""
         if not FEISHU_AVAILABLE:
             raise RuntimeError("lark-oapi not installed. Run: pip install lark-oapi")
-
-        # Create Lark client
-        client = lark.Client.builder()\
-            .app_id(self._app_id)\
-            .app_secret(self._app_secret)\
-            .log_level(lark.LogLevel.INFO)\
-            .build()
 
         # Note: encrypt_key and verification_token are only used for webhook mode
         # For WebSocket long connection mode, we use empty strings
@@ -58,11 +51,14 @@ class FeishuAdapter(BasePlatformAdapter):
             .register_p2_im_message_receive_v1(self._on_message)\
             .build()
 
-        # Create WebSocket client
+        # Create WebSocket client (WSClient needs app_id/app_secret, not client object)
         self._ws_client = FeishuWSClient(
-            client,
+            self._app_id,
+            self._app_secret,
+            lark.LogLevel.INFO,
             handler,
-            auto_reconnect=True,
+            self._domain,
+            True,
         )
 
         # Start WebSocket client in a separate thread to avoid event loop conflicts
