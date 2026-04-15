@@ -46,14 +46,14 @@ class FileMemoryProvider(MemoryProvider):
         self._memory_dir = Path(memory_dir)
         self._memory_dir.mkdir(exist_ok=True)
         self._memory_file = self._memory_dir / "MEMORY.md"
-        self._user_file = self._memory_dir / "USER.md"
+        self._profile_file = self._memory_dir / "profile.md"
         self._lock = threading.RLock()
 
         # 确保文件存在
         if not self._memory_file.exists():
-            self._memory_file.write_text("# MEMORY.md - Agent Memory\n\n", encoding="utf-8")
-        if not self._user_file.exists():
-            self._user_file.write_text("# USER.md - User Profile\n\n", encoding="utf-8")
+            self._memory_file.write_text("# 记忆历史\n\n", encoding="utf-8")
+        if not self._profile_file.exists():
+            self._profile_file.write_text("# 用户画像\n\n", encoding="utf-8")
 
     @property
     def name(self) -> str:
@@ -110,7 +110,7 @@ class FileMemoryProvider(MemoryProvider):
         if target == "agent":
             file_path = self._memory_file
         elif target == "user":
-            file_path = self._user_file
+            file_path = self._profile_file
         else:
             raise ValueError("Invalid target. Use 'agent' or 'user'.")
 
@@ -197,7 +197,7 @@ class FileMemoryProvider(MemoryProvider):
     def append_profile(self, section: str, content: str) -> str:
         """更新用户画像的某个 section"""
         section_tag = f"## {section}"
-        return self._atomic_replace_section(self._user_file, section_tag, content)
+        return self._atomic_replace_section(self._profile_file, section_tag, content)
 
     def _atomic_replace_section(self, file_path: Path, section_tag: str, new_content: str) -> str:
         """原子替换用户画像中的某个 section"""
