@@ -45,10 +45,6 @@ class FeishuAdapter(BasePlatformAdapter):
             .log_level(lark.LogLevel.INFO)\
             .build()
 
-        # Create event handler
-        def handle_event(event: Any) -> None:
-            asyncio.create_task(self._on_event(event))
-
         handler = EventDispatcherHandler.builder()\
             .register_p2_im_message_receive_v1(self._on_message)\
             .build()
@@ -73,13 +69,6 @@ class FeishuAdapter(BasePlatformAdapter):
         self._running = False
         logger.info("Feishu adapter stopped")
 
-    async def _on_event(self, event: Any) -> None:
-        """Handle incoming event from Feishu."""
-        try:
-            logger.debug(f"Feishu event received: {event}")
-        except Exception as e:
-            logger.error(f"Error processing Feishu event: {e}")
-
     async def _on_message(self, data: Any) -> None:
         """Handle incoming message from Feishu."""
         try:
@@ -91,31 +80,32 @@ class FeishuAdapter(BasePlatformAdapter):
 
     def _parse_message(self, data: Any) -> Optional[MessageEvent]:
         """Parse Feishu message into MessageEvent."""
-        message = data.get("message", {})
+        # lark-oapi passes event objects where message data is nested under event.message
+        message = getattr(data, "message", None) or (data.get("message") if isinstance(data, dict) else None)
         if not message:
             return None
 
-        msg_type = message.get("msg_type", "text")
-        content = message.get("content", {})
+        msg_type = getattr(message, "msg_type", None) or message.get("msg_type", "text")
+        content = getattr(message, "content", None) or message.get("content", {})
 
         if msg_type == "text":
-            text = content.get("text", "")
+            text = content.get("text", "") if isinstance(content, dict) else ""
         else:
             text = str(content)
 
-        sender = message.get("sender", {})
+        sender = getattr(message, "sender", None) or message.get("sender", {}) if isinstance(message, dict) else None
         event = MessageEvent(
             text=text,
             message_type=MessageType.TEXT if msg_type == "text" else msg_type,
-            message_id=message.get("message_id"),
+            message_id=getattr(message, "message_id", None) or message.get("message_id") if isinstance(message, dict) else None,
             source=self._build_source(message),
         )
         return event
 
     def _build_source(self, message: Any) -> Any:
         """Build session source from message."""
-        sender = message.get("sender", {})
-        chat = message.get("chat_id", "")
+        sender = getattr(message, "sender", None) or (message.get("sender") if isinstance(message, dict) else None) or {}
+        chat = getattr(message, "chat_id", None) or (message.get("chat_id") if isinstance(message, dict) else "")
 
         class Source:
             def __init__(self, chat_id: str, user_id: Optional[str], user_name: str) -> None:
@@ -123,10 +113,14 @@ class FeishuAdapter(BasePlatformAdapter):
                 self.user_id = user_id
                 self.user_name = user_name
 
+        sender_id = getattr(sender, "sender_id", None) or (sender.get("sender_id") if isinstance(sender, dict) else None)
+        open_id = getattr(sender_id, "open_id", None) or (sender_id.get("open_id") if isinstance(sender_id, dict) else None) if sender_id else None
+        sender_nickname = getattr(sender, "sender_nickname", None) or (sender.get("sender_nickname") if isinstance(sender, dict) else "")
+
         return Source(
             chat_id=chat,
-            user_id=sender.get("sender_id", {}).get("open_id"),
-            user_name=sender.get("sender_nickname", ""),
+            user_id=open_id,
+            user_name=sender_nickname,
         )
 
     async def send(self, chat_id: str, content: str) -> SendResult:
@@ -161,8 +155,3 @@ class FeishuAdapter(BasePlatformAdapter):
         except Exception as e:
             logger.error(f"Feishu send error: {e}")
             return SendResult(success=False, error=str(e))
-
-    @staticmethod
-    def check_feishu_requirements() -> bool:
-        """Check if Feishu dependencies are available."""
-        return FEISHU_AVAILABLE
