@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface Skill {
   name: string;
@@ -25,6 +25,7 @@ export function SkillDropdown({
   onClose,
 }: SkillDropdownProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Filter skills based on filter text
   const filteredSkills = skills.filter(
@@ -32,6 +33,11 @@ export function SkillDropdown({
       skill.name.toLowerCase().includes(filter.toLowerCase()) ||
       skill.description.toLowerCase().includes(filter.toLowerCase())
   );
+
+  // Reset selected index when filter changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [filter]);
 
   // Handle click outside
   useEffect(() => {
@@ -44,6 +50,34 @@ export function SkillDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onClose]);
 
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) =>
+          prev < filteredSkills.length - 1 ? prev + 1 : 0
+        );
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) =>
+          prev > 0 ? prev - 1 : filteredSkills.length - 1
+        );
+      } else if (e.key === "Tab") {
+        e.preventDefault();
+        if (filteredSkills[selectedIndex]) {
+          onSelect(filteredSkills[selectedIndex]);
+        }
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [filteredSkills, selectedIndex, onSelect, onClose]);
+
   if (filteredSkills.length === 0) {
     return null;
   }
@@ -51,17 +85,24 @@ export function SkillDropdown({
   return (
     <div
       ref={ref}
-      className="absolute z-50 w-72 rounded-lg border bg-white shadow-lg"
+      className="fixed z-50 w-72 rounded-lg border bg-white shadow-lg"
       style={{ top: position.top + 36, left: position.left }}
     >
       <div className="max-h-64 overflow-y-auto p-1">
-        {filteredSkills.map((skill) => (
+        {filteredSkills.map((skill, index) => (
           <button
             key={skill.name}
-            className="flex w-full cursor-pointer items-start gap-2 rounded-md p-2 text-left hover:bg-gray-100"
+            className={`flex w-full cursor-pointer items-start gap-2 rounded-md p-2 text-left transition-colors ${
+              index === selectedIndex
+                ? "bg-blue-50 text-blue-900"
+                : "hover:bg-gray-100"
+            }`}
             onClick={() => onSelect(skill)}
+            onMouseEnter={() => setSelectedIndex(index)}
           >
-            <span className="flex h-6 min-w-6 items-center justify-center rounded bg-primary/10 px-1 text-xs font-medium text-primary">
+            <span className={`flex h-6 min-w-6 items-center justify-center rounded px-1 text-xs font-medium ${
+                index === selectedIndex ? "bg-blue-200 text-blue-700" : "bg-primary/10 text-primary"
+              }`}>
               /
             </span>
             <div className="flex-1 overflow-hidden">

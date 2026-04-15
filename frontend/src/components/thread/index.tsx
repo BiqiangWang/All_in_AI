@@ -497,7 +497,12 @@ export function Thread() {
                         }}
                         onPaste={handlePaste}
                         onKeyDown={(e) => {
-                          if (showSkillDropdown && e.key === "Escape") {
+                          if (showSkillDropdown) {
+                            if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape") {
+                              return; // Let SkillDropdown handle these
+                            }
+                          }
+                          if (e.key === "Escape" && !showSkillDropdown) {
                             setShowSkillDropdown(false);
                           }
                           if (
