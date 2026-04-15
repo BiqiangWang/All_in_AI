@@ -4,8 +4,9 @@ Aegra API client for gateway.
 Handles communication with Aegra agent via Agent Protocol.
 """
 
+import asyncio
 import logging
-from typing import Optional, Dict, Any
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,6 @@ class AegraAPIClient:
         run_id = run_data.get("run_id", run_data.get("id"))
 
         # Wait for completion
-        import asyncio
         for _ in range(60):
             await asyncio.sleep(1)
             status_response = await self._client.get(
@@ -67,3 +67,9 @@ class AegraAPIClient:
     async def close(self) -> None:
         """Close the client."""
         await self._client.aclose()
+
+    async def __aenter__(self) -> "AegraAPIClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()

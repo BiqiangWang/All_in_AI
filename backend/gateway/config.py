@@ -8,8 +8,13 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Any
 from enum import Enum
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+# Load .env file from backend directory
+_backend_dir = Path(__file__).parent.parent
+_load_dotenv = load_dotenv(_backend_dir / ".env")
 
 
 class Platform(Enum):

@@ -4,10 +4,11 @@ Session management for the gateway.
 Handles session context tracking and message routing.
 """
 
+import asyncio
 import uuid
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from backend.gateway.config import Platform
@@ -40,32 +41,38 @@ class SessionStore:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, Dict] = {}
+        self._lock = asyncio.Lock()
 
-    def get_or_create_session(self, source: SessionSource) -> str:
+    async def get_or_create_session(self, source: SessionSource) -> str:
         """Get or create a session for the source."""
         key = build_session_key(source)
-        if key not in self._sessions:
-            self._sessions[key] = {
-                "id": str(uuid.uuid4()),
-                "source": source,
-                "created_at": datetime.now(),
-                "last_active": datetime.now(),
-                "thread_id": None,
-            }
-        else:
-            self._sessions[key]["last_active"] = datetime.now()
-        return key
+        async with self._lock:
+            if key not in self._sessions:
+                self._sessions[key] = {
+                    "id": str(uuid.uuid4()),
+                    "source": source,
+                    "created_at": datetime.now(timezone.utc),
+                    "last_active": datetime.now(timezone.utc),
+                    "thread_id": None,
+                }
+            else:
+                self._sessions[key]["last_active"] = datetime.now(timezone.utc)
+            return key
 
-    def get_session(self, key: str) -> Optional[Dict]:
+    async def get_session(self, key: str) -> Optional[Dict]:
         """Get session by key."""
-        return self._sessions.get(key)
+        async with self._lock:
+            session = self._sessions.get(key)
+            return dict(session) if session else None
 
-    def set_thread_id(self, key: str, thread_id: str) -> None:
+    async def set_thread_id(self, key: str, thread_id: str) -> None:
         """Set the Aegra thread ID for a session."""
-        if key in self._sessions:
-            self._sessions[key]["thread_id"] = thread_id
+        async with self._lock:
+            if key in self._sessions:
+                self._sessions[key]["thread_id"] = thread_id
 
-    def get_thread_id(self, key: str) -> Optional[str]:
+    async def get_thread_id(self, key: str) -> Optional[str]:
         """Get the Aegra thread ID for a session."""
-        session = self._sessions.get(key)
-        return session["thread_id"] if session else None
+        async with self._lock:
+            session = self._sessions.get(key)
+            return session["thread_id"] if session else None

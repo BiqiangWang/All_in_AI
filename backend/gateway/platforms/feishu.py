@@ -7,6 +7,7 @@ Supports WebSocket long connection mode for receiving and sending messages.
 import asyncio
 import json
 import logging
+import threading
 from typing import Optional, Any
 
 try:
@@ -30,6 +31,11 @@ class FeishuAdapter(BasePlatformAdapter):
     def __init__(self, config: Any) -> None:
         super().__init__(config, "feishu")
         self._ws_client: Optional[FeishuWSClient] = None
+        self._client = lark.Client.builder()\
+            .app_id(config.extra.get("app_id", ""))\
+            .app_secret(config.extra.get("app_secret", ""))\
+            .log_level(lark.LogLevel.INFO)\
+            .build()
         self._app_id: str = config.extra.get("app_id", "")
         self._app_secret: str = config.extra.get("app_secret", "")
         self._domain: str = config.extra.get("domain", "feishu")
@@ -46,7 +52,9 @@ class FeishuAdapter(BasePlatformAdapter):
             .log_level(lark.LogLevel.INFO)\
             .build()
 
-        handler = EventDispatcherHandler.builder()\
+        # Note: encrypt_key and verification_token are only used for webhook mode
+        # For WebSocket long connection mode, we use empty strings
+        handler = EventDispatcherHandler.builder("", "")\
             .register_p2_im_message_receive_v1(self._on_message)\
             .build()
 
@@ -57,8 +65,10 @@ class FeishuAdapter(BasePlatformAdapter):
             auto_reconnect=True,
         )
 
-        # Start connection in background
-        asyncio.create_task(self._ws_client.start())
+        # Start WebSocket client in a separate thread to avoid event loop conflicts
+        # WSClient.start() is blocking and runs its own event loop
+        self._ws_thread = threading.Thread(target=self._ws_client.start, daemon=True)
+        self._ws_thread.start()
         self._running = True
         logger.info("Feishu WebSocket connection started")
         return True
@@ -127,11 +137,6 @@ class FeishuAdapter(BasePlatformAdapter):
     async def send(self, chat_id: str, content: str) -> SendResult:
         """Send a message to Feishu chat."""
         try:
-            client = lark.Client.builder()\
-                .app_id(self._app_id)\
-                .app_secret(self._app_secret)\
-                .build()
-
             request = CreateMessageRequest.builder()\
                 .receive_id_type("chat_id")\
                 .create_message_request_body(
@@ -143,7 +148,7 @@ class FeishuAdapter(BasePlatformAdapter):
                 )\
                 .build()
 
-            response = client.im.v1.message.create(request)
+            response = self._client.im.v1.message.create(request)
 
             if response.code == 0:
                 return SendResult(
