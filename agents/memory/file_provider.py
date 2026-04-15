@@ -66,34 +66,30 @@ class FileMemoryProvider(MemoryProvider):
         return [
             {
                 "name": "memory",
-                "description": "Read from or write to memory store. Use write to store important information that should be remembered.",
+                "description": "Store important information in memory. Use append mode for new memories, or update specific sections for user profile changes.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "target": {
                             "type": "string",
                             "enum": ["agent", "user"],
-                            "description": "Which memory store: 'agent' for agent memory, 'user' for user profile"
+                            "description": "'agent' for agent's own memory, 'user' for user profile"
                         },
                         "action": {
                             "type": "string",
-                            "enum": ["read", "write"],
-                            "description": "'read' to retrieve memory, 'write' to store memory"
+                            "enum": ["read", "append", "update"],
+                            "description": "'read' to retrieve memory, 'append' to add new memory with timestamp, 'update' to modify existing section"
                         },
                         "content": {
                             "type": "string",
-                            "description": "Content to write to memory (required for write action)"
+                            "description": "Natural language content to store. Agent will auto-add timestamp."
                         },
-                        "start_line": {
-                            "type": "integer",
-                            "description": "Start line number (1-indexed, inclusive). Required for write action."
-                        },
-                        "end_line": {
-                            "type": "integer",
-                            "description": "End line number (1-indexed, inclusive). Required for write action. If exceeds file length, truncates to last line."
+                        "section": {
+                            "type": "string",
+                            "description": "For 'user' target with 'update' action only: which profile section to update (e.g., '基础信息', '沟通偏好')."
                         }
                     },
-                    "required": ["target", "action"]
+                    "required": ["target", "action", "content"]
                 }
             }
         ]
@@ -106,24 +102,25 @@ class FileMemoryProvider(MemoryProvider):
     def _handle_memory(self, args: dict[str, Any]) -> str:
         target = args.get("target")
         action = args.get("action")
-
-        if target == "agent":
-            file_path = self._memory_file
-        elif target == "user":
-            file_path = self._profile_file
-        else:
-            raise ValueError("Invalid target. Use 'agent' or 'user'.")
+        content = args.get("content", "")
 
         if action == "read":
-            content = file_path.read_text(encoding="utf-8")
-            return self._build_memory_context_block(content)
-        elif action == "write":
-            start_line = args.get("start_line")
-            end_line = args.get("end_line")
-            if start_line is None or end_line is None:
-                raise ValueError("start_line and end_line are required")
-            content = args.get("content", "")
-            return self._atomic_write_range(file_path, start_line, end_line, content)
+            if target == "agent":
+                file_path = self._memory_file
+            elif target == "user":
+                file_path = self._profile_file
+            else:
+                raise ValueError("Invalid target. Use 'agent' or 'user'.")
+            read_content = file_path.read_text(encoding="utf-8")
+            return self._build_memory_context_block(read_content)
+        elif action == "append":
+            if target == "agent":
+                return self.append_memory(content)
+            elif target == "user":
+                return self.append_profile("更新记录", content)
+        elif action == "update":
+            section = args.get("section", "更新记录")
+            return self.append_profile(section, content)
         raise ValueError(f"Unknown action: {action}")
 
     def _build_memory_context_block(self, raw_context: str) -> str:
