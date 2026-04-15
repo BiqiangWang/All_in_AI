@@ -232,4 +232,4 @@ class FileMemoryProvider(MemoryProvider):
                 new_section = f"{section_tag}\n{new_content}\n"
                 new_content_full = current[:start_idx] + new_section + current[end_idx:]
                 self._atomic_write(file_path, new_content_full)
-                return f"Updated {section}"
+                return f"Updated {section_tag}"
