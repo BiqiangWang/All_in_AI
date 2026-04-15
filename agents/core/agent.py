@@ -60,26 +60,21 @@ def search_web(query: str = Field(description="The search query to look up on th
 
 
 @tool
-def memory(target: str = Field(description="Target store: 'agent' for agent memory, 'user' for user profile"),
-           action: str = Field(description="Action: 'read' or 'write'"),
-           content: str = Field(default=None, description="Content to write (required for write)"),
-           start_line: int = Field(default=None, description="Start line number (1-indexed, inclusive). Required for write."),
-           end_line: int = Field(default=None, description="End line number (1-indexed, inclusive). Required for write. If exceeds file length, truncates to last line.")) -> str:
-    """Read from or write to memory store.
-
-    Use read to retrieve all stored memory. Use write to store new information by replacing a specific line range.
+def memory(target: str = Field(description="'agent' for agent's own memory, 'user' for user profile"),
+           action: str = Field(description="'read' to retrieve memory, 'append' to add new memory with timestamp, 'update' to modify existing section"),
+           content: str = Field(default=None, description="Natural language content to store. Agent will auto-add timestamp."),
+           section: str = Field(default=None, description="For 'user' target with 'update' action: which profile section to update.")) -> str:
+    """Store important information in memory. Use append mode for new memories, or update specific sections for user profile changes.
 
     Examples:
-    - Read user memory: memory(target="user", action="read")
-    - Write to user memory: memory(target="user", action="write", content="New info here", start_line=3, end_line=5)
+    - Read memory: memory(target="agent", action="read")
+    - Append new memory: memory(target="agent", action="append", content="用户喜欢简洁直接的回答")
+    - Update user profile: memory(target="user", action="update", section="基础信息", content="- 称呼：小汪")
     """
-    return _get_memory_provider().handle_tool_call("memory", {
-        "target": target,
-        "action": action,
-        "content": content,
-        "start_line": start_line,
-        "end_line": end_line,
-    })
+    args = {"target": target, "action": action, "content": content}
+    if section:
+        args["section"] = section
+    return _get_memory_provider().handle_tool_call("memory", args)
 
 
 def _get_memory_context() -> str:
