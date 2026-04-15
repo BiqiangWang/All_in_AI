@@ -18,11 +18,16 @@ function formatThreadTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
+  const isYesterday = new Date(now.getTime() - 86400000).toDateString() === date.toDateString();
 
   if (isToday) {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  if (isYesterday) {
+    return "昨天 " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  return date.toLocaleDateString([], { month: "short", day: "numeric" }) + " " +
+    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function ThreadList({
