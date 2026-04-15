@@ -18,6 +18,12 @@ INJECTION_PATTERNS = [
 ZERO_WIDTH_CHARS = re.compile(r"[\u200b\u200c\u200d\ufeff]")
 
 
+def get_timestamp() -> str:
+    """获取当前时间戳字符串"""
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
 def _scan_content(content: str) -> tuple[bool, str]:
     """扫描内容安全，返回 (is_safe, cleaned_content)"""
     # 移除零宽字符
@@ -181,3 +187,37 @@ class FileMemoryProvider(MemoryProvider):
             new_lines = lines[:start_idx] + [cleaned] + lines[end_idx:]
             self._atomic_write(file_path, "".join(new_lines))
             return f"Updated {file_path.name} lines {start_line}-{end_line}"
+
+    def append_memory(self, content: str) -> str:
+        """追加新记忆，自动添加时间戳"""
+        timestamp = get_timestamp()
+        entry = f"\n## {timestamp}\n{content.strip()}\n"
+        return self._atomic_append(self._memory_file, entry)
+
+    def append_profile(self, section: str, content: str) -> str:
+        """更新用户画像的某个 section"""
+        section_tag = f"## {section}"
+        return self._atomic_replace_section(self._user_file, section_tag, content)
+
+    def _atomic_replace_section(self, file_path: Path, section_tag: str, new_content: str) -> str:
+        """原子替换用户画像中的某个 section"""
+        with self._lock:
+            current = file_path.read_text(encoding="utf-8")
+            if section_tag not in current:
+                # Section 不存在，追加
+                new_section = f"\n{section_tag}\n{new_content}\n"
+                return self._atomic_append(file_path, new_section)
+            else:
+                # 找到 section 起始位置
+                start_idx = current.find(section_tag)
+                # 找到下一个 ## 或文件末尾
+                next_section = current.find("\n## ", start_idx + len(section_tag))
+                if next_section == -1:
+                    end_idx = len(current)
+                else:
+                    end_idx = next_section
+                old_section = current[start_idx:end_idx]
+                new_section = f"{section_tag}\n{new_content}\n"
+                new_content_full = current[:start_idx] + new_section + current[end_idx:]
+                self._atomic_write(file_path, new_content_full)
+                return f"Updated {section}"
