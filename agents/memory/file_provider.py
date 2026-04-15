@@ -17,6 +17,8 @@ INJECTION_PATTERNS = [
 
 ZERO_WIDTH_CHARS = re.compile(r"[\u200b\u200c\u200d\ufeff]")
 
+MAX_MEMORY_LINES = 200
+
 
 def get_timestamp() -> str:
     """获取当前时间戳字符串"""
@@ -187,7 +189,22 @@ class FileMemoryProvider(MemoryProvider):
         """追加新记忆，自动添加时间戳"""
         timestamp = get_timestamp()
         entry = f"\n## {timestamp}\n{content.strip()}\n"
-        return self._atomic_append(self._memory_file, entry)
+        result = self._atomic_append(self._memory_file, entry)
+        # 检查是否需要总结
+        self.summarize_if_needed()
+        return result
+
+    def summarize_if_needed(self) -> None:
+        """如果记忆过长，生成总结并截断历史"""
+        with self._lock:
+            current = self._memory_file.read_text(encoding="utf-8")
+            lines = current.splitlines()
+            if len(lines) > MAX_MEMORY_LINES:
+                # 保留最近的一半记忆作为详细历史
+                keep_lines = lines[len(lines)//2:]
+                summary = f"\n## 早期记忆摘要\n[详见历史记录]\n"
+                new_content = summary + "\n".join(keep_lines)
+                self._atomic_write(self._memory_file, new_content)
 
     def append_profile(self, section: str, content: str) -> str:
         """更新用户画像的某个 section"""
