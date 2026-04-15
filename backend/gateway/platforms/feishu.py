@@ -5,6 +5,7 @@ Supports WebSocket long connection mode for receiving and sending messages.
 """
 
 import asyncio
+import json
 import logging
 from typing import Optional, Any
 
@@ -137,7 +138,7 @@ class FeishuAdapter(BasePlatformAdapter):
                     CreateMessageRequestBody.builder()
                     .receive_id(chat_id)
                     .msg_type("text")
-                    .content(f'{{"text":"{content}"}}')
+                    .content(json.dumps({"text": content}))
                     .build()
                 )\
                 .build()
