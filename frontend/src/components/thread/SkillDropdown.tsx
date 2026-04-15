@@ -6,6 +6,7 @@ export interface Skill {
   name: string;
   description: string;
   triggers: string[];
+  path?: string;
 }
 
 interface SkillDropdownProps {

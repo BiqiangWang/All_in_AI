@@ -200,10 +200,11 @@ export function Thread() {
   }, [messages]);
 
   useEffect(() => {
-    // Fetch skills list
-    fetch("/skills")
+    // Fetch skills list from backend
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:2026";
+    fetch(`${apiUrl}/skills`)
       .then((res) => res.json())
-      .then((data) => setSkills(data.skills || []))
+      .then((data) => setSkills(Array.isArray(data) ? data : data.skills || []))
       .catch(() => setSkills([]));
   }, []);
 
